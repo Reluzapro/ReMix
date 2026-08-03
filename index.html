@@ -56,7 +56,10 @@
       <span>📚</span> Mes Cours & Quiz
     </button>
     <button class="nav-btn" data-target="flashcard-view">
-      <span>🎴</span> Mode Flashcard / Consultation Directe
+      <span>🎴</span> Mode Flashcard
+    </button>
+    <button class="nav-btn" data-target="duels-view">
+      <span>⚔️</span> Duels 1v1 & Classement
     </button>
     <button class="nav-btn" data-target="shop-view">
       <span>🛒</span> Boutique
@@ -94,7 +97,93 @@
       </div>
     </section>
 
-    <!-- 2. QUIZ INTERFACE VIEW -->
+    <!-- 2. DUELS 1V1 & LEADERBOARD VIEW -->
+    <section id="duels-view" class="view-section">
+      <div class="section-title">⚔️ Arène de Duel 1v1 & Pari de Pièces</div>
+
+      <!-- Duel Mode Selection Cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem;">
+        <!-- Create Room Card -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.75rem; border-radius: var(--radius-lg);">
+          <h3 style="font-family: var(--font-title); font-size: 1.25rem; color: var(--accent-cyan); margin-bottom: 1rem;">🥊 Créer un Salon de Duel</h3>
+
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Matière du Duel :</label>
+          <select id="duel-subject-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1rem;">
+            <!-- Injected via JS -->
+          </select>
+
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Montant du Pari (🪙 Pièces) :</label>
+          <select id="duel-wager-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1.25rem;">
+            <option value="0">0 🪙 (Amical / Sans pari)</option>
+            <option value="50">50 🪙 (Pot total : 100 🪙)</option>
+            <option value="100" selected>100 🪙 (Pot total : 200 🪙)</option>
+            <option value="250">250 🪙 (Pot total : 500 🪙)</option>
+            <option value="500">500 🪙 (Pot total : 1 000 🪙)</option>
+          </select>
+
+          <button class="btn-primary" id="btn-create-duel" style="width: 100%;">Lancer et Générer le Code Code ➔</button>
+        </div>
+
+        <!-- Join Room Card -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.75rem; border-radius: var(--radius-lg);">
+          <h3 style="font-family: var(--font-title); font-size: 1.25rem; color: var(--accent-purple); margin-bottom: 1rem;">🔑 Rejoindre un Duel via Code</h3>
+
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Code du Salon (Ex: DUEL-A8F2) :</label>
+          <input type="text" id="input-duel-code" placeholder="Entrez le code DUEL-XXXX..." style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; font-weight: 700; text-transform: uppercase; margin-bottom: 1.25rem;">
+
+          <button class="btn-secondary" id="btn-join-duel" style="width: 100%;">Rejoindre le Duel ⚔️</button>
+        </div>
+      </div>
+
+      <!-- Active Arena Match Display -->
+      <div id="duel-arena-box" style="display: none; background: rgba(255,255,255,0.03); border: 2px solid var(--accent-purple); border-radius: var(--radius-lg); padding: 2rem; margin-bottom: 2.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 2rem;" id="arena-user-avatar">🎓</span>
+            <div>
+              <div style="font-weight: 700;" id="arena-user-name">Vous</div>
+              <div style="color: var(--accent-green); font-size: 1.1rem; font-weight: 800;" id="arena-user-score">0 Pts</div>
+            </div>
+          </div>
+
+          <div style="text-align: center;">
+            <span class="level-badge" style="background: var(--gradient-main); font-size: 0.9rem;" id="arena-pot-badge">Pot : 200 🪙</span>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem;" id="arena-room-code">DUEL-1234</div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="text-align: right;">
+              <div style="font-weight: 700;" id="arena-opp-name">Adversaire</div>
+              <div style="color: var(--accent-red); font-size: 1.1rem; font-weight: 800;" id="arena-opp-score">0 Pts</div>
+            </div>
+            <span style="font-size: 2rem;" id="arena-opp-avatar">⚔️</span>
+          </div>
+        </div>
+
+        <button class="btn-primary" id="btn-arena-start-match" style="width: 100%;">Combattre ! ⚔️</button>
+      </div>
+
+      <!-- Leaderboard Table Section -->
+      <div class="section-title">🏆 Classement Général des Joueurs</div>
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+          <thead>
+            <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-size: 0.85rem;">
+              <th style="padding: 1rem;">Rang</th>
+              <th style="padding: 1rem;">Joueur</th>
+              <th style="padding: 1rem;">Niveau</th>
+              <th style="padding: 1rem;">Pièces 🪙</th>
+              <th style="padding: 1rem;">Victoires ⚔️</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-tbody">
+            <!-- Injected via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3. QUIZ INTERFACE VIEW -->
     <section id="quiz-view" class="view-section">
       <div class="quiz-container">
         <div class="quiz-header">
@@ -112,7 +201,7 @@
           <div class="quiz-progress-fill" id="quiz-progress-fill"></div>
         </div>
 
-        <!-- Powerups Bar (Without x2 Pts) -->
+        <!-- Powerups Bar -->
         <div class="powerups-bar">
           <button class="powerup-btn" id="pu-fifty" data-pu="powerup_fifty">
             <span>✂️ 50/50</span> (<span id="pu-count-fifty">0</span>)
@@ -145,7 +234,7 @@
       </div>
     </section>
 
-    <!-- 3. FLASHCARD / DIRECT VIEW -->
+    <!-- 4. FLASHCARD / DIRECT VIEW -->
     <section id="flashcard-view" class="view-section">
       <div class="quiz-container" style="text-align: center; max-width: 700px;">
         <span id="fc-subject-badge" class="level-badge" style="margin-bottom: 1rem; display: inline-block;">Flashcards</span>
@@ -170,7 +259,7 @@
       </div>
     </section>
 
-    <!-- 4. RESULTS SUMMARY VIEW -->
+    <!-- 5. RESULTS SUMMARY VIEW -->
     <section id="results-view" class="view-section">
       <div class="quiz-container" style="text-align: center;">
         <h2 style="font-family: var(--font-title); font-size: 2.2rem; margin-bottom: 0.5rem;">🎉 Session Terminée !</h2>
@@ -210,7 +299,7 @@
       </div>
     </section>
 
-    <!-- 5. SHOP VIEW -->
+    <!-- 6. SHOP VIEW -->
     <section id="shop-view" class="view-section">
       <div class="section-title">
         <span>Boutique de Récompenses</span>
@@ -228,7 +317,7 @@
       </div>
     </section>
 
-    <!-- 6. PROFILE & STATS VIEW -->
+    <!-- 7. PROFILE & STATS VIEW -->
     <section id="profile-view" class="view-section">
       <div class="profile-card">
         <div class="profile-avatar" id="prof-avatar">🎓</div>
@@ -236,6 +325,7 @@
           <h2 id="prof-name">Réviseur Pro</h2>
           <p style="color: var(--accent-cyan); font-weight: 600;" id="prof-title">Novice de Révision</p>
           <p style="color: var(--text-secondary); margin-top: 0.5rem;" id="prof-level-info">Niveau 1 (0 / 120 XP)</p>
+          <button class="btn-secondary" id="btn-change-username" style="margin-top: 0.5rem; padding: 0.35rem 0.75rem; font-size: 0.8rem;">✏️ Modifier mon Pseudo</button>
         </div>
       </div>
 
@@ -275,7 +365,7 @@
       </div>
     </section>
 
-    <!-- 7. CSV IMPORTER VIEW -->
+    <!-- 8. CSV IMPORTER VIEW -->
     <section id="csv-view" class="view-section">
       <div class="section-title">Importer un Nouveau Fichier de Cours (.csv / .txt)</div>
 

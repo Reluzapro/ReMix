@@ -1,9 +1,10 @@
-// Main application controller linking UI, QuizEngine, Gamification, Storage, and Audio
+// Main application controller linking UI, QuizEngine, Gamification, Storage, Audio, and Multiplayer
 import { StorageManager } from './storage.js';
 import { QuizEngine } from './quizEngine.js';
 import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS } from './gamification.js';
 import { CSVParser } from './csvParser.js';
 import { SoundFX } from './audio.js';
+import { MultiplayerEngine } from './multiplayer.js';
 
 class AppController {
   constructor() {
@@ -14,6 +15,7 @@ class AppController {
     this.currentFolderPath = [];
     this.profileClickCount = 0;
     this.profileClickTimer = null;
+    this.currentDuelRoom = null;
   }
 
   init() {
@@ -146,6 +148,7 @@ class AppController {
     }
 
     if (viewId === 'subjects-view') this.renderSubjects();
+    if (viewId === 'duels-view') this.renderDuelsView();
     if (viewId === 'shop-view') this.renderShop();
     if (viewId === 'profile-view') this.renderProfile();
     if (viewId === 'flashcard-view') this.startFlashcardMode();
@@ -347,6 +350,41 @@ class AppController {
     });
 
     container.appendChild(card);
+  }
+
+  renderDuelsView() {
+    const subjects = StorageManager.getSubjects();
+    const select = document.getElementById('duel-subject-select');
+    select.innerHTML = '';
+
+    Object.values(subjects).forEach(sub => {
+      select.innerHTML += `<option value="${sub.id}">${sub.name} (${sub.questions ? sub.questions.length : 0} cartes)</option>`;
+    });
+
+    // Populate Leaderboard Table
+    const leaderboard = MultiplayerEngine.getLeaderboard();
+    const tbody = document.getElementById('leaderboard-tbody');
+    tbody.innerHTML = '';
+
+    leaderboard.forEach((player, idx) => {
+      const tr = document.createElement('tr');
+      if (player.isUser) tr.style.background = 'rgba(99, 102, 241, 0.2)';
+
+      const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
+
+      tr.innerHTML = `
+        <td style="padding: 1rem; font-weight: 700;">${rankBadge}</td>
+        <td style="padding: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+          <span>${player.avatar || '🎓'}</span>
+          <span>${player.name}</span>
+          ${player.isUser ? '<span class="level-badge" style="font-size: 0.7rem; background: var(--accent-purple);">Vous</span>' : ''}
+        </td>
+        <td style="padding: 1rem;">Niv. ${player.level}</td>
+        <td style="padding: 1rem; color: var(--accent-amber); font-weight: 700;">${player.coins} 🪙</td>
+        <td style="padding: 1rem; color: var(--accent-green); font-weight: 700;">${player.wins || 0}</td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
 
   startQuiz(subjectId, mode = 'classic') {
@@ -792,6 +830,115 @@ class AppController {
   }
 
   setupEventListeners() {
+    // Change Username Button
+    const btnChangeUser = document.getElementById('btn-change-username');
+    if (btnChangeUser) {
+      btnChangeUser.addEventListener('click', () => {
+        const profile = StorageManager.getProfile();
+        const newName = prompt('Entrez votre nouveau pseudo :', profile.name);
+        if (newName && newName.trim()) {
+          profile.name = newName.trim();
+          StorageManager.saveProfile(profile);
+          this.renderProfile();
+          this.renderDuelsView();
+          alert('Pseudo mis à jour avec succès !');
+        }
+      });
+    }
+
+    // Create Duel Room
+    const btnCreateDuel = document.getElementById('btn-create-duel');
+    if (btnCreateDuel) {
+      btnCreateDuel.addEventListener('click', () => {
+        const subjectId = document.getElementById('duel-subject-select').value;
+        const wager = parseInt(document.getElementById('duel-wager-select').value, 10);
+        const subjects = StorageManager.getSubjects();
+        const sub = subjects[subjectId];
+
+        const res = MultiplayerEngine.createRoom({ subject: sub, wager: wager });
+        if (res.success) {
+          this.currentDuelRoom = res.room;
+
+          const arenaBox = document.getElementById('duel-arena-box');
+          arenaBox.style.display = 'block';
+
+          document.getElementById('arena-user-avatar').textContent = res.room.host.avatar;
+          document.getElementById('arena-user-name').textContent = res.room.host.name;
+          document.getElementById('arena-user-score').textContent = '0 Pts';
+
+          document.getElementById('arena-opp-avatar').textContent = '⚔️';
+          document.getElementById('arena-opp-name').textContent = 'Adversaire (Code: ' + res.roomCode + ')';
+          document.getElementById('arena-opp-score').textContent = '0 Pts';
+
+          document.getElementById('arena-pot-badge').textContent = `Pot Total : ${wager * 2} 🪙`;
+          document.getElementById('arena-room-code').textContent = `CODE DUEL : ${res.roomCode}`;
+
+          alert(`🥊 Salon de Duel créé ! Donnez le Code "${res.roomCode}" à votre adversaire pour qu'il rejoigne le pari !`);
+          this.updateHeaderStats();
+        } else {
+          alert(res.message);
+        }
+      });
+    }
+
+    // Join Duel Room
+    const btnJoinDuel = document.getElementById('btn-join-duel');
+    if (btnJoinDuel) {
+      btnJoinDuel.addEventListener('click', () => {
+        const codeInput = document.getElementById('input-duel-code').value.trim();
+        if (!codeInput) {
+          alert('Veuillez entrer un code de salon DUEL-XXXX !');
+          return;
+        }
+
+        const res = MultiplayerEngine.joinRoom({ roomCode: codeInput });
+        if (res.success) {
+          this.currentDuelRoom = res.room;
+
+          const arenaBox = document.getElementById('duel-arena-box');
+          arenaBox.style.display = 'block';
+
+          document.getElementById('arena-user-avatar').textContent = res.room.guest ? res.room.guest.avatar : '🎓';
+          document.getElementById('arena-user-name').textContent = res.room.guest ? res.room.guest.name : 'Vous';
+          document.getElementById('arena-user-score').textContent = '0 Pts';
+
+          document.getElementById('arena-opp-avatar').textContent = res.room.host ? res.room.host.avatar : '⚔️';
+          document.getElementById('arena-opp-name').textContent = res.room.host ? res.room.host.name : 'Host';
+          document.getElementById('arena-opp-score').textContent = '0 Pts';
+
+          document.getElementById('arena-pot-badge').textContent = `Pot Total : ${res.room.wager * 2} 🪙`;
+          document.getElementById('arena-room-code').textContent = `CODE DUEL : ${res.room.code}`;
+
+          alert(`⚔️ Vous avez rejoint le duel ${res.room.code} ! Pari engagé : ${res.room.wager} 🪙.`);
+          this.updateHeaderStats();
+        } else {
+          alert(res.message);
+        }
+      });
+    }
+
+    // Start Arena Duel Match
+    const btnArenaStart = document.getElementById('btn-arena-start-match');
+    if (btnArenaStart) {
+      btnArenaStart.addEventListener('click', () => {
+        if (!this.currentDuelRoom) return;
+        const room = this.currentDuelRoom;
+
+        this.quizEngine.startSession({
+          subjectId: room.subjectId,
+          questions: room.questions,
+          mode: 'classic',
+          timerSeconds: 15,
+          questionCount: room.questions.length
+        });
+
+        document.getElementById('quiz-subject-badge').textContent = `⚔️ DUEL 1v1 (${room.code})`;
+        this.switchView('quiz-view');
+        this.renderCurrentQuestion(this.quizEngine.getCurrentQuestion());
+        this.startTimer();
+      });
+    }
+
     document.getElementById('btn-quick-play').addEventListener('click', () => {
       const subjects = Object.keys(StorageManager.getSubjects());
       const randomSub = subjects[Math.floor(Math.random() * subjects.length)];
