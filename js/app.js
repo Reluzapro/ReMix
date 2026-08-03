@@ -1,0 +1,880 @@
+// Main application controller linking UI, QuizEngine, Gamification, Storage, and Audio
+import { StorageManager } from './storage.js';
+import { QuizEngine } from './quizEngine.js';
+import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS } from './gamification.js';
+import { CSVParser } from './csvParser.js';
+import { SoundFX } from './audio.js';
+
+class AppController {
+  constructor() {
+    this.quizEngine = new QuizEngine();
+    this.timerInterval = null;
+    this.currentSubjectId = null;
+    this.flashcardSession = null;
+    this.currentFolderPath = [];
+    this.profileClickCount = 0;
+    this.profileClickTimer = null;
+  }
+
+  init() {
+    this.applyUserTheme();
+    this.updateHeaderStats();
+    this.setupNavigation();
+    this.renderCategoryFilters();
+    this.renderSubjects();
+    this.renderShop();
+    this.renderProfile();
+    this.setupCSVImporter();
+    this.setupEventListeners();
+    this.setupProfileAdminTrigger();
+  }
+
+  setupProfileAdminTrigger() {
+    const attachClickToEl = (el) => {
+      if (!el) return;
+      el.addEventListener('click', () => {
+        this.profileClickCount += 1;
+
+        clearTimeout(this.profileClickTimer);
+        this.profileClickTimer = setTimeout(() => {
+          this.profileClickCount = 0;
+        }, 3000);
+
+        if (this.profileClickCount === 11) {
+          this.profileClickCount = 0;
+          this.triggerAdminMode();
+        }
+      });
+    };
+
+    attachClickToEl(document.getElementById('prof-avatar'));
+    attachClickToEl(document.getElementById('header-level'));
+  }
+
+  triggerAdminMode() {
+    const password = prompt("🔐 Entrez le mot de passe Admin :");
+    if (password !== "ReMixadmin") {
+      alert("❌ Mot de passe incorrect !");
+      return;
+    }
+
+    SoundFX.playLevelUp();
+    const profile = StorageManager.getProfile();
+
+    const choice = prompt(
+      "🔓 MODE ADMIN DÉBLOQUÉ !\n\n" +
+      "Choisissez une option :\n" +
+      "1 : Ajouter +1 000 Pièces 🪙\n" +
+      "2 : Ajouter +50 000 Pièces 🪙\n" +
+      "3 : Passer au Niveau Max (Niv. 99) 🚀\n" +
+      "4 : Débloquer tous les Thèmes & Avatars 🎨",
+      "1"
+    );
+
+    if (choice === "1") {
+      profile.coins += 1000;
+      alert("✅ +1 000 Pièces ajoutées !");
+    } else if (choice === "2") {
+      profile.coins += 50000;
+      alert("🚀 +50 000 Pièces ajoutées au compte !");
+    } else if (choice === "3") {
+      profile.level = 99;
+      profile.xp = 99999;
+      alert("⚡ Niveau 99 activé !");
+    } else if (choice === "4") {
+      SHOP_ITEMS.forEach(item => {
+        if (!profile.purchasedItems.includes(item.id)) {
+          profile.purchasedItems.push(item.id);
+        }
+      });
+      alert("🎨 Tous les objets de la boutique ont été débloqués gratuitement !");
+    } else if (choice !== null) {
+      profile.coins += 1000;
+      alert("✅ +1 000 Pièces ajoutées par défaut !");
+    }
+
+    StorageManager.saveProfile(profile);
+    this.updateHeaderStats();
+    this.renderShop();
+    this.renderProfile();
+  }
+
+  triggerMathJax() {
+    if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+      window.MathJax.typesetPromise().catch(err => console.log('MathJax typeset error:', err));
+    }
+  }
+
+  applyUserTheme() {
+    const profile = StorageManager.getProfile();
+    document.body.className = profile.theme || 'theme-cyberpunk';
+  }
+
+  updateHeaderStats() {
+    const profile = StorageManager.getProfile();
+    document.getElementById('header-coins').textContent = profile.coins;
+    document.getElementById('header-streak').textContent = profile.streak;
+    document.getElementById('header-level').textContent = `Niv. ${profile.level}`;
+  }
+
+  setupNavigation() {
+    const navBtns = document.querySelectorAll('.nav-btn');
+    navBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetViewId = btn.getAttribute('data-target');
+        this.switchView(targetViewId);
+
+        navBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        SoundFX.playClick();
+      });
+    });
+
+    document.getElementById('btn-logo').addEventListener('click', () => {
+      this.currentFolderPath = [];
+      this.switchView('subjects-view');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.nav-btn[data-target="subjects-view"]').classList.add('active');
+    });
+  }
+
+  switchView(viewId) {
+    document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
+    const target = document.getElementById(viewId);
+    if (target) {
+      target.classList.add('active');
+    }
+
+    if (viewId === 'subjects-view') this.renderSubjects();
+    if (viewId === 'shop-view') this.renderShop();
+    if (viewId === 'profile-view') this.renderProfile();
+    if (viewId === 'flashcard-view') this.startFlashcardMode();
+
+    this.triggerMathJax();
+  }
+
+  renderCategoryFilters() {
+    const select = document.getElementById('filter-category-select');
+    if (!select) return;
+
+    const subjects = StorageManager.getSubjects();
+    const categories = new Set();
+
+    Object.values(subjects).forEach(sub => {
+      if (sub.category) categories.add(sub.category);
+    });
+
+    select.innerHTML = `<option value="ALL">📁 Toutes les catégories (${Object.keys(subjects).length})</option>`;
+    Array.from(categories).sort().forEach(cat => {
+      select.innerHTML += `<option value="${cat}">${cat}</option>`;
+    });
+
+    select.addEventListener('change', () => {
+      this.currentFolderPath = [];
+      this.renderSubjects();
+    });
+
+    document.getElementById('search-subject-input').addEventListener('input', () => this.renderSubjects());
+  }
+
+  renderSubjects() {
+    const container = document.getElementById('subjects-container');
+    const subjects = StorageManager.getSubjects();
+    container.innerHTML = '';
+
+    const selectedCategory = document.getElementById('filter-category-select')?.value || 'ALL';
+    const searchQuery = (document.getElementById('search-subject-input')?.value || '').toLowerCase().trim();
+
+    let breadcrumbHTML = `<div class="breadcrumb-bar">`;
+    breadcrumbHTML += `<span class="breadcrumb-item" data-path-idx="-1">📁 Accueil</span>`;
+
+    this.currentFolderPath.forEach((folder, idx) => {
+      breadcrumbHTML += `<span class="breadcrumb-separator">➔</span>`;
+      breadcrumbHTML += `<span class="breadcrumb-item" data-path-idx="${idx}">${folder}</span>`;
+    });
+
+    if (this.currentFolderPath.length > 0) {
+      breadcrumbHTML += `<button class="btn-secondary" id="btn-folder-up" style="margin-left: auto; padding: 0.35rem 0.75rem; font-size: 0.85rem;">⬅️ Dossier Parent</button>`;
+    }
+    breadcrumbHTML += `</div>`;
+
+    if (searchQuery) {
+      container.innerHTML = `<div style="grid-column: 1/-1; color: var(--text-secondary); margin-bottom: 1rem;">Résultats pour "${searchQuery}" :</div>`;
+      Object.values(subjects).forEach(sub => {
+        if (!sub.name.toLowerCase().includes(searchQuery) && !sub.description?.toLowerCase().includes(searchQuery)) return;
+        this.renderDeckCard(container, sub);
+      });
+      this.triggerMathJax();
+      return;
+    }
+
+    const currentDepth = this.currentFolderPath.length;
+    const subfoldersMap = new Map();
+    const directDecks = [];
+
+    Object.values(subjects).forEach(sub => {
+      if (selectedCategory !== 'ALL' && sub.category !== selectedCategory) return;
+
+      const pathParts = sub.pathParts || [sub.name];
+      let matchesCurrentPath = true;
+
+      for (let i = 0; i < currentDepth; i++) {
+        if (pathParts[i] !== this.currentFolderPath[i]) {
+          matchesCurrentPath = false;
+          break;
+        }
+      }
+
+      if (!matchesCurrentPath) return;
+
+      if (pathParts.length > currentDepth + 1) {
+        const folderName = pathParts[currentDepth];
+        if (!subfoldersMap.has(folderName)) {
+          subfoldersMap.set(folderName, { name: folderName, deckCount: 0, questionCount: 0, decks: [] });
+        }
+        const info = subfoldersMap.get(folderName);
+        info.deckCount += 1;
+        info.questionCount += (sub.questions ? sub.questions.length : 0);
+        info.decks.push(sub);
+      } else if (pathParts.length === currentDepth + 1) {
+        directDecks.push(sub);
+      }
+    });
+
+    const wrapper = document.createElement('div');
+    wrapper.style.gridColumn = '1/-1';
+    wrapper.innerHTML = breadcrumbHTML;
+    container.appendChild(wrapper);
+
+    wrapper.querySelectorAll('.breadcrumb-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.getAttribute('data-path-idx'), 10);
+        if (idx === -1) this.currentFolderPath = [];
+        else this.currentFolderPath = this.currentFolderPath.slice(0, idx + 1);
+        this.renderSubjects();
+      });
+    });
+
+    const btnUp = wrapper.querySelector('#btn-folder-up');
+    if (btnUp) {
+      btnUp.addEventListener('click', () => {
+        this.currentFolderPath.pop();
+        this.renderSubjects();
+      });
+    }
+
+    subfoldersMap.forEach(folder => {
+      const card = document.createElement('div');
+      card.className = 'folder-card';
+      const icon = folder.name.toLowerCase().includes('anglais') ? '🇬🇧' : (folder.name.toLowerCase().includes('math') ? '📐' : '📁');
+
+      const fMastery = StorageManager.getFolderMastery(folder.decks);
+      if (fMastery.borderStyle) card.style.border = fMastery.borderStyle;
+      if (fMastery.boxShadow) card.style.boxShadow = fMastery.boxShadow;
+
+      card.innerHTML = `
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div class="folder-icon-large">${icon}</div>
+            <span class="level-badge" style="background: rgba(0,0,0,0.4); border: 1px solid ${fMastery.colorHex}; color: ${fMastery.colorHex}; font-size: 0.8rem;">${fMastery.statusText}</span>
+          </div>
+          <div class="folder-title">${folder.name}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">${folder.deckCount} sous-dossiers / paquets</div>
+        </div>
+        <div class="folder-meta">
+          <span>${folder.questionCount} cartes au total</span>
+          <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        this.currentFolderPath.push(folder.name);
+        this.renderSubjects();
+        SoundFX.playClick();
+      });
+
+      container.appendChild(card);
+    });
+
+    directDecks.forEach(sub => {
+      this.renderDeckCard(container, sub);
+    });
+
+    this.triggerMathJax();
+  }
+
+  renderDeckCard(container, sub) {
+    const card = document.createElement('div');
+    card.className = 'subject-card';
+    const qCount = sub.questions ? sub.questions.length : 0;
+    const cleanName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+
+    const dMastery = StorageManager.getDeckMastery(sub);
+    if (dMastery.borderStyle) card.style.border = dMastery.borderStyle;
+    if (dMastery.boxShadow) card.style.boxShadow = dMastery.boxShadow;
+
+    card.innerHTML = `
+      <div>
+        <div class="subject-header">
+          <span class="subject-icon">${sub.icon || '📚'}</span>
+          <div style="overflow: hidden; flex: 1;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.25rem;">
+              <h3 class="subject-title" style="font-size: 1.1rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${cleanName}</h3>
+              <span class="level-badge" style="background: rgba(0,0,0,0.4); border: 1px solid ${dMastery.colorHex}; color: ${dMastery.colorHex}; font-size: 0.75rem; white-space: nowrap;">${dMastery.statusText}</span>
+            </div>
+            <span class="level-badge" style="background: rgba(255,255,255,0.1); color: var(--accent-cyan); font-size: 0.75rem;">${sub.category || 'Général'}</span>
+          </div>
+        </div>
+        <p class="subject-desc">${sub.description || 'Défiez vos connaissances dans cette matière.'}</p>
+      </div>
+      <div class="subject-footer">
+        <span>${qCount} Cartes</span>
+        <div style="display: flex; gap: 0.4rem;">
+          <button class="btn-secondary btn-start-fc" data-sub="${sub.id}" style="padding: 0.4rem 0.65rem; font-size: 0.8rem;">🎴 Flashcard</button>
+          <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
+        </div>
+      </div>
+    `;
+
+    card.querySelector('.btn-start-quiz').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.startQuiz(sub.id, 'classic');
+    });
+
+    card.querySelector('.btn-start-fc').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.startFlashcardMode(sub.id);
+    });
+
+    container.appendChild(card);
+  }
+
+  startQuiz(subjectId, mode = 'classic') {
+    const subjects = StorageManager.getSubjects();
+    const sub = subjects[subjectId];
+    if (!sub || !sub.questions || sub.questions.length === 0) {
+      alert('Aucune question disponible pour ce sujet.');
+      return;
+    }
+
+    this.currentSubjectId = subjectId;
+    const settings = StorageManager.getSettings();
+
+    const firstQuestion = this.quizEngine.startSession({
+      subjectId: subjectId,
+      questions: sub.questions,
+      mode: mode,
+      timerSeconds: settings.timerDuration || 20,
+      questionCount: settings.questionsPerSession || 10
+    });
+
+    document.getElementById('quiz-subject-badge').textContent = sub.name;
+    this.switchView('quiz-view');
+    this.renderCurrentQuestion(firstQuestion);
+    this.startTimer();
+  }
+
+  renderCurrentQuestion(question) {
+    if (!question) return;
+
+    document.getElementById('quiz-counter').textContent = `Question ${question.currentIndex + 1}/${question.totalQuestions}`;
+    document.getElementById('quiz-question-text').innerHTML = question.question;
+
+    const fillPercent = ((question.currentIndex) / question.totalQuestions) * 100;
+    document.getElementById('quiz-progress-fill').style.width = `${fillPercent}%`;
+
+    const optionsContainer = document.getElementById('quiz-options-container');
+    optionsContainer.innerHTML = '';
+
+    document.getElementById('quiz-explanation-box').style.display = 'none';
+    document.getElementById('quiz-next-btn').style.display = 'none';
+
+    this.updatePowerupButtons();
+
+    question.shuffledOptions.forEach(opt => {
+      const card = document.createElement('div');
+      card.className = 'option-card';
+      if (question.disabledOptions.includes(opt)) {
+        card.classList.add('disabled');
+      }
+
+      card.innerHTML = `<span>${opt}</span><span class="opt-check"></span>`;
+      card.addEventListener('click', () => {
+        if (card.classList.contains('disabled') || card.classList.contains('selected')) return;
+        this.handleAnswerSelection(card, opt);
+      });
+
+      optionsContainer.appendChild(card);
+    });
+
+    this.triggerMathJax();
+  }
+
+  handleAnswerSelection(selectedCard, selectedOption) {
+    clearInterval(this.timerInterval);
+
+    const result = this.quizEngine.submitAnswer(selectedOption);
+
+    const allCards = document.querySelectorAll('.option-card');
+    allCards.forEach(c => c.style.pointerEvents = 'none');
+
+    if (result.wasCorrect) {
+      selectedCard.classList.add('correct');
+      selectedCard.querySelector('.opt-check').textContent = '✓';
+    } else {
+      selectedCard.classList.add('wrong');
+      selectedCard.querySelector('.opt-check').textContent = '✗';
+
+      allCards.forEach(c => {
+        if (c.innerHTML.includes(result.correctAnswer)) {
+          c.classList.add('correct');
+        }
+      });
+    }
+
+    this.updateHeaderStats();
+
+    const currentQ = this.quizEngine.currentSession?.questions[this.quizEngine.currentSession.currentIndex - 1];
+    if (currentQ && (currentQ.explanation || !result.wasCorrect)) {
+      const expBox = document.getElementById('quiz-explanation-box');
+      const expText = document.getElementById('quiz-explanation-text');
+
+      let msg = currentQ.explanation ? currentQ.explanation : `La réponse exacte était : ${result.correctAnswer}`;
+      expText.innerHTML = msg;
+      expBox.style.display = 'block';
+    }
+
+    const nextBtn = document.getElementById('quiz-next-btn');
+    nextBtn.style.display = 'inline-block';
+
+    nextBtn.onclick = () => {
+      if (result.isFinished) {
+        this.showResults(result.summary);
+      } else {
+        this.renderCurrentQuestion(result.nextQuestion);
+        this.startTimer();
+      }
+    };
+
+    this.triggerMathJax();
+  }
+
+  startFlashcardMode(subjectId = null) {
+    const subjects = StorageManager.getSubjects();
+    let sub = null;
+    if (subjectId) sub = subjects[subjectId];
+    else {
+      const keys = Object.keys(subjects);
+      sub = subjects[keys[0]];
+    }
+
+    if (!sub || !sub.questions || sub.questions.length === 0) return;
+
+    const allSRS = StorageManager.getSRSData();
+    const now = Date.now();
+    const sortedQuestions = [...sub.questions].sort((a, b) => {
+      const srsA = allSRS[a.id];
+      const srsB = allSRS[b.id];
+      const dueA = srsA ? (srsA.nextDue <= now ? 0 : 1) : 0;
+      const dueB = srsB ? (srsB.nextDue <= now ? 0 : 1) : 0;
+      if (dueA !== dueB) return dueA - dueB;
+      const mA = srsA ? srsA.mastery : -1;
+      const mB = srsB ? srsB.mastery : -1;
+      return mA - mB;
+    });
+
+    this.flashcardSession = {
+      subject: sub,
+      questions: sortedQuestions,
+      currentIndex: 0
+    };
+
+    this.renderFlashcardCard();
+  }
+
+  renderFlashcardCard() {
+    if (!this.flashcardSession) return;
+    const session = this.flashcardSession;
+
+    if (session.currentIndex >= session.questions.length) {
+      alert('Toutes les flashcards de ce paquet ont été révisées !');
+      this.switchView('subjects-view');
+      return;
+    }
+
+    const q = session.questions[session.currentIndex];
+    document.getElementById('fc-subject-badge').textContent = session.subject.name;
+    document.getElementById('fc-progress').textContent = `Carte ${session.currentIndex + 1}/${session.questions.length}`;
+
+    document.getElementById('fc-question-text').innerHTML = q.question;
+    document.getElementById('fc-correct-text').innerHTML = `Réponse : ${q.correct}`;
+    document.getElementById('fc-explanation-text').innerHTML = q.explanation ? q.explanation : `Règle / Explication : ${q.correct}`;
+
+    document.getElementById('fc-answer-box').style.display = 'block';
+
+    const nextFC = (isCorrect) => {
+      StorageManager.updateCardSRS(q.id, isCorrect);
+      session.currentIndex += 1;
+      this.renderFlashcardCard();
+    };
+
+    document.getElementById('btn-fc-again').onclick = () => nextFC(false);
+    document.getElementById('btn-fc-good').onclick = () => nextFC(true);
+    document.getElementById('btn-fc-easy').onclick = () => nextFC(true);
+
+    this.triggerMathJax();
+  }
+
+  startTimer() {
+    clearInterval(this.timerInterval);
+    const session = this.quizEngine.currentSession;
+    if (!session) return;
+
+    session.currentTimer = session.timerSeconds;
+    const timerEl = document.getElementById('quiz-timer');
+
+    this.timerInterval = setInterval(() => {
+      if (session.mode === 'timeAttack' && session.globalTimer !== null) {
+        session.globalTimer -= 1;
+        timerEl.textContent = `${session.globalTimer}s`;
+        if (session.globalTimer <= 0) {
+          clearInterval(this.timerInterval);
+          this.showResults(this.quizEngine.finishSession());
+        }
+      } else {
+        session.currentTimer -= 1;
+        timerEl.textContent = `${session.currentTimer}s`;
+        if (session.currentTimer <= 0) {
+          clearInterval(this.timerInterval);
+
+          const result = this.quizEngine.submitAnswer('');
+          if (result.isFinished) {
+            this.showResults(result.summary);
+          } else {
+            this.renderCurrentQuestion(result.nextQuestion);
+            this.startTimer();
+          }
+        }
+      }
+    }, 1000);
+  }
+
+  updatePowerupButtons() {
+    const profile = StorageManager.getProfile();
+    const inv = profile.inventory || {};
+
+    const elFifty = document.getElementById('pu-count-fifty');
+    if (elFifty) elFifty.textContent = inv.powerup_fifty || 0;
+
+    const elTime = document.getElementById('pu-count-time');
+    if (elTime) elTime.textContent = inv.powerup_time || 0;
+
+    const elSkip = document.getElementById('pu-count-skip');
+    if (elSkip) elSkip.textContent = inv.powerup_skip || 0;
+  }
+
+  showResults(summary) {
+    if (!summary) return;
+    this.updateHeaderStats();
+
+    document.getElementById('res-score').textContent = summary.score;
+    document.getElementById('res-accuracy').textContent = `${summary.accuracy}%`;
+    document.getElementById('res-xp').textContent = `+${summary.xpEarned} XP`;
+    document.getElementById('res-coins').textContent = `+${summary.coinsEarned} 🪙`;
+
+    const masteryBanner = document.getElementById('res-progression-banner');
+    const deltaVal = summary.accuracy >= 70 ? `+${Math.round(summary.accuracy * 0.25)}%` : `-${Math.round((100 - summary.accuracy) * 0.2)}%`;
+    const deltaColor = summary.accuracy >= 70 ? '#6ee7b7' : '#fca5a5';
+
+    masteryBanner.style.borderColor = summary.accuracy >= 70 ? 'var(--accent-green)' : 'var(--accent-red)';
+    masteryBanner.innerHTML = `📈 Évolution de la Maîtrise : <span style="color: ${deltaColor}; font-weight: 800;">${deltaVal}</span> (${summary.accuracy}% de précision sur cette session)`;
+
+    const levelupEl = document.getElementById('res-levelup-banner');
+    levelupEl.style.display = summary.leveledUp ? 'block' : 'none';
+
+    this.switchView('results-view');
+
+    document.getElementById('btn-results-retry').onclick = () => {
+      this.startQuiz(this.currentSubjectId, 'classic');
+    };
+    document.getElementById('btn-results-home').onclick = () => {
+      this.switchView('subjects-view');
+    };
+  }
+
+  renderShop() {
+    const profile = StorageManager.getProfile();
+
+    const customContainer = document.getElementById('custom-rewards-container');
+    customContainer.innerHTML = '';
+
+    if (!profile.customRewards || profile.customRewards.length === 0) {
+      customContainer.innerHTML = `<div style="grid-column: 1/-1; color: var(--text-secondary); padding: 1.5rem; text-align: center; background: rgba(255,255,255,0.03); border-radius: var(--radius-md); border: 1px dashed var(--border-color);">Aucune récompense personnelle ajoutée pour le moment. Cliquez sur "🎁 Ajouter une Récompense Perso" pour en créer une !</div>`;
+    } else {
+      profile.customRewards.forEach(rew => {
+        const card = document.createElement('div');
+        card.className = 'shop-card';
+        card.innerHTML = `
+          <div class="shop-icon">🎁</div>
+          <div class="shop-item-title">${rew.title}</div>
+          <div class="shop-item-desc">Débloqué ${rew.redeemedCount || 0} fois (${rew.cost} 🪙)</div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; width: 100%;">
+            <button class="btn-primary btn-redeem" data-id="${rew.id}" style="flex: 1;">
+              Utiliser (${rew.cost} 🪙)
+            </button>
+            <button class="btn-secondary btn-delete-reward" data-id="${rew.id}" style="color: var(--accent-red); border-color: rgba(239, 68, 68, 0.4); padding: 0.4rem 0.75rem;">
+              🗑️
+            </button>
+          </div>
+        `;
+        customContainer.appendChild(card);
+      });
+    }
+
+    customContainer.querySelectorAll('.btn-redeem').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const res = GamificationEngine.redeemCustomReward(profile, id);
+        alert(res.message);
+        this.updateHeaderStats();
+        this.renderShop();
+      });
+    });
+
+    customContainer.querySelectorAll('.btn-delete-reward').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const rew = profile.customRewards.find(r => r.id === id);
+        if (rew && confirm(`Supprimer la récompense "${rew.title}" ?`)) {
+          profile.customRewards = profile.customRewards.filter(r => r.id !== id);
+          StorageManager.saveProfile(profile);
+          this.renderShop();
+        }
+      });
+    });
+
+    const catalogContainer = document.getElementById('shop-catalog-container');
+    catalogContainer.innerHTML = '';
+
+    SHOP_ITEMS.forEach(item => {
+      const isOwned = profile.purchasedItems.includes(item.id);
+      const isEquipped = profile.theme === item.id || profile.avatar === item.icon;
+
+      const card = document.createElement('div');
+      card.className = 'shop-card';
+      card.innerHTML = `
+        <div class="shop-icon">${item.icon}</div>
+        <div class="shop-item-title">${item.title}</div>
+        <div class="shop-item-desc">${item.desc}</div>
+        <button class="btn-primary btn-buy-shop" data-id="${item.id}" style="width: 100%;" ${isEquipped ? 'disabled' : ''}>
+          ${isEquipped ? 'Équipé' : isOwned ? 'Équiper' : `Acheter (${item.cost} 🪙)`}
+        </button>
+      `;
+      catalogContainer.appendChild(card);
+    });
+
+    catalogContainer.querySelectorAll('.btn-buy-shop').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.getAttribute('data-id');
+        const res = GamificationEngine.buyItem(profile, itemId);
+        alert(res.message);
+        this.applyUserTheme();
+        this.updateHeaderStats();
+        this.renderShop();
+      });
+    });
+  }
+
+  renderProfile() {
+    const profile = StorageManager.getProfile();
+    document.getElementById('prof-avatar').textContent = profile.avatar || '🎓';
+    document.getElementById('prof-name').textContent = profile.name || 'Réviseur Pro';
+    document.getElementById('prof-title').textContent = GamificationEngine.getLevelTitle(profile.level);
+    document.getElementById('prof-level-info').textContent = `Niveau ${profile.level} (${profile.xp} / ${GamificationEngine.getRequiredXP(profile.level)} XP)`;
+
+    const stats = profile.stats || {};
+    document.getElementById('stat-games').textContent = stats.gamesPlayed || 0;
+    document.getElementById('stat-correct').textContent = stats.correctAnswers || 0;
+    document.getElementById('stat-maxstreak').textContent = profile.maxStreak || 0;
+    document.getElementById('stat-perfects').textContent = stats.perfectGames || 0;
+
+    const achContainer = document.getElementById('achievements-container');
+    achContainer.innerHTML = '';
+    const unlocked = new Set(profile.unlockedAchievements || []);
+
+    ACHIEVEMENTS.forEach(ach => {
+      const isUnlocked = unlocked.has(ach.id);
+      const card = document.createElement('div');
+      card.className = 'shop-card';
+      if (!isUnlocked) card.style.opacity = '0.4';
+
+      card.innerHTML = `
+        <div class="shop-icon">${ach.icon}</div>
+        <div class="shop-item-title">${ach.title}</div>
+        <div class="shop-item-desc">${ach.desc}</div>
+        <div class="level-badge">${isUnlocked ? 'Débloqué ✓' : 'Verrouillé 🔒'}</div>
+      `;
+      achContainer.appendChild(card);
+    });
+
+    this.setupProfileAdminTrigger();
+  }
+
+  setupCSVImporter() {
+    const dropZone = document.getElementById('drop-zone-csv');
+    const fileInput = document.getElementById('input-csv-file');
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--accent-cyan)';
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = 'var(--border-color)';
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--border-color)';
+      if (e.dataTransfer.files.length > 0) {
+        this.processCSVFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        this.processCSVFile(fileInput.files[0]);
+      }
+    });
+  }
+
+  processCSVFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const res = CSVParser.parse(text);
+
+      const resultBox = document.getElementById('csv-result-box');
+      resultBox.style.display = 'block';
+
+      if (res.success) {
+        const defaultName = file.name.replace(/\.[^/.]+$/, '');
+        const subjectName = prompt('Nom de la matière pour ce paquet :', defaultName);
+        if (!subjectName) return;
+
+        const newSubject = {
+          id: `custom_sub_${Date.now()}`,
+          name: subjectName,
+          pathParts: [subjectName],
+          icon: res.isAnkiDeck ? '🎴' : '📑',
+          category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours CSV',
+          description: res.isAnkiDeck
+            ? `Importé depuis Anki (${res.count} cartes avec fausses réponses auto-générées).`
+            : `Cours importé avec ${res.count} questions.`,
+          questions: res.questions
+        };
+
+        StorageManager.addSubject(newSubject);
+        resultBox.innerHTML = `
+          <h4 style="color: var(--accent-green);">✅ Importation réussie !</h4>
+          <p>${res.count} cartes/questions ajoutées avec succès à la matière "${subjectName}".</p>
+        `;
+        this.renderCategoryFilters();
+        this.renderSubjects();
+      } else {
+        resultBox.innerHTML = `
+          <h4 style="color: var(--accent-red);">❌ Erreur d'importation</h4>
+          <p>${res.error}</p>
+        `;
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  setupEventListeners() {
+    document.getElementById('btn-quick-play').addEventListener('click', () => {
+      const subjects = Object.keys(StorageManager.getSubjects());
+      const randomSub = subjects[Math.floor(Math.random() * subjects.length)];
+      this.startQuiz(randomSub, 'classic');
+    });
+
+    document.querySelectorAll('.powerup-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const puType = btn.getAttribute('data-pu');
+        const res = this.quizEngine.usePowerup(puType);
+        if (res.success) {
+          SoundFX.playClick();
+          this.updatePowerupButtons();
+          if (res.nextQuestion) {
+            this.renderCurrentQuestion(res.nextQuestion);
+          }
+        } else {
+          alert(res.message);
+        }
+      });
+    });
+
+    document.getElementById('btn-export-data').addEventListener('click', () => {
+      StorageManager.exportAllData();
+    });
+
+    document.getElementById('input-import-data').addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const res = StorageManager.importData(event.target.result);
+          if (res.success) {
+            alert('Sauvegarde restaurée avec succès !');
+            this.init();
+          } else {
+            alert(`Erreur de restauration : ${res.error}`);
+          }
+        };
+        reader.readAsText(e.target.files[0]);
+      }
+    });
+
+    document.getElementById('btn-reset-data').addEventListener('click', () => {
+      if (confirm('Voulez-vous vraiment réinitialiser toutes vos données (points, cours, progression) ?')) {
+        StorageManager.resetAllData();
+        location.reload();
+      }
+    });
+
+    const modal = document.getElementById('modal-custom-reward');
+    document.getElementById('btn-add-custom-reward').addEventListener('click', () => {
+      modal.classList.add('active');
+    });
+
+    document.getElementById('btn-modal-cancel').addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+
+    document.getElementById('btn-modal-save-reward').addEventListener('click', () => {
+      const title = document.getElementById('input-reward-title').value.trim();
+      const cost = parseInt(document.getElementById('input-reward-cost').value, 10);
+
+      if (!title || isNaN(cost) || cost <= 0) {
+        alert('Veuillez spécifier un titre et un coût valide.');
+        return;
+      }
+
+      const profile = StorageManager.getProfile();
+      profile.customRewards.push({
+        id: `rew_${Date.now()}`,
+        title: title,
+        cost: cost,
+        redeemedCount: 0
+      });
+
+      StorageManager.saveProfile(profile);
+      modal.classList.remove('active');
+      this.renderShop();
+    });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const app = new AppController();
+  app.init();
+});
