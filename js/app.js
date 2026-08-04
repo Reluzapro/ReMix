@@ -847,26 +847,12 @@ class AppController {
   }
 
   setupEventListeners() {
-    // Cloud Account Login Button
-    const btnCloudLogin = document.getElementById('btn-cloud-login');
-    if (btnCloudLogin) {
-      btnCloudLogin.addEventListener('click', async () => {
-        const username = document.getElementById('input-cloud-user').value.trim();
-        const passcode = document.getElementById('input-cloud-pass').value.trim();
-        const statusEl = document.getElementById('cloud-sync-status');
-
-        if (!username || !passcode) {
-          alert('Veuillez saisir un pseudo et un mot de passe secret !');
-          return;
-        }
-
-        const res = await StorageManager.loginCloudAccount(username, passcode);
-        if (res.success) {
-          statusEl.style.color = 'var(--accent-green)';
-          statusEl.textContent = res.isNew ? '✅ Compte Cloud sécurisé créé ! Données synchronisées.' : '🚀 Connecté ! Données synchronisées entre vos appareils.';
-          SoundFX.playLevelUp();
-          this.init();
-        }
+    // Cloud Account Modal Trigger Button
+    const btnOpenCloudModal = document.getElementById('btn-open-cloud-modal');
+    if (btnOpenCloudModal) {
+      btnOpenCloudModal.addEventListener('click', () => {
+        const modal = document.getElementById('modal-cloud-login');
+        if (modal) modal.classList.add('active');
       });
     }
 
