@@ -412,8 +412,8 @@
         <p style="color: var(--text-secondary); font-size: 0.9rem;">Connectez-vous pour synchroniser votre progression entre tous vos appareils et apparaître dans le classement mondial !</p>
       </div>
       <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
-        <input type="text" id="modal-cloud-user" placeholder="Pseudo (ex: Remi_ATS)" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
-        <input type="password" id="modal-cloud-pass" placeholder="Mot de passe secret" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
+        <input type="text" id="modal-cloud-user" autocomplete="username" placeholder="Pseudo (ex: Remi_ATS)" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
+        <input type="password" id="modal-cloud-pass" autocomplete="current-password" placeholder="Mot de passe secret" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
       </div>
       <div style="display: flex; gap: 0.75rem;">
         <button id="btn-modal-cloud-login-submit" class="btn-primary" style="flex: 1; padding: 0.85rem;">🚀 Se connecter / Créer</button>
@@ -438,6 +438,6 @@
     </div>
   </div>
 
-  <script src="js/app.bundle.js?v=cloud3"></script>
+  <script src="js/app.bundle.js?v=cloud4"></script>
 </body>
 </html>
