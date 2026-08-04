@@ -2,10 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ReMix - Jeu de Révision Gamifié</title>
-  <meta name="description" content="Révisez vos cours et paquets Anki avec ReMix, l'application de révision gamifiée complète avec MathJax et répétition espacée !">
+  <meta name="description" content="Révisez vos cours et paquets Anki avec ReMix, l'application de révision gamifiée complète avec MathJax, duels 1v1 en ligne et répétition espacée !">
+  <meta name="theme-color" content="#0b0f19">
   <link rel="stylesheet" href="style.css">
+
+  <!-- PeerJS for Real-time Cross-Network WebRTC Duels -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
   <!-- MathJax Config & Library -->
   <script>
@@ -53,22 +57,22 @@
   <!-- Navigation Tabs -->
   <nav class="app-nav">
     <button class="nav-btn active" data-target="subjects-view">
-      <span>📚</span> Mes Cours & Quiz
+      <span>📚</span> Cours & Quiz
     </button>
     <button class="nav-btn" data-target="flashcard-view">
-      <span>🎴</span> Mode Flashcard
+      <span>🎴</span> Flashcards
     </button>
     <button class="nav-btn" data-target="duels-view">
-      <span>⚔️</span> Duels 1v1 & Classement
+      <span>⚔️</span> Duels 1v1
     </button>
     <button class="nav-btn" data-target="shop-view">
       <span>🛒</span> Boutique
     </button>
     <button class="nav-btn" data-target="profile-view">
-      <span>📊</span> Profil & Stats
+      <span>📊</span> Profil
     </button>
     <button class="nav-btn" data-target="csv-view">
-      <span>📥</span> Importer CSV
+      <span>📥</span> Importer
     </button>
   </nav>
 
@@ -101,11 +105,17 @@
     <section id="duels-view" class="view-section">
       <div class="section-title">⚔️ Arène de Duel 1v1 & Pari de Pièces</div>
 
+      <!-- Mobile friendly instructions -->
+      <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid var(--accent-purple); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; font-size: 0.9rem;">
+        🌐 <strong>Jouez en ligne avec vos amis depuis chez vous ou sur votre smartphone !</strong><br>
+        Créez un salon, donnez le code <code>DUEL-XXXX</code> à votre ami(e) et affrontez-vous en direct avec pari de pièces !
+      </div>
+
       <!-- Duel Mode Selection Cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 2.5rem;">
         <!-- Create Room Card -->
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.75rem; border-radius: var(--radius-lg);">
-          <h3 style="font-family: var(--font-title); font-size: 1.25rem; color: var(--accent-cyan); margin-bottom: 1rem;">🥊 Créer un Salon de Duel</h3>
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-lg);">
+          <h3 style="font-family: var(--font-title); font-size: 1.2rem; color: var(--accent-cyan); margin-bottom: 1rem;">🥊 Créer un Salon de Duel</h3>
 
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Matière du Duel :</label>
           <select id="duel-subject-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1rem;">
@@ -121,12 +131,12 @@
             <option value="500">500 🪙 (Pot total : 1 000 🪙)</option>
           </select>
 
-          <button class="btn-primary" id="btn-create-duel" style="width: 100%;">Lancer et Générer le Code Code ➔</button>
+          <button class="btn-primary" id="btn-create-duel" style="width: 100%;">Lancer et Générer le Code ➔</button>
         </div>
 
         <!-- Join Room Card -->
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.75rem; border-radius: var(--radius-lg);">
-          <h3 style="font-family: var(--font-title); font-size: 1.25rem; color: var(--accent-purple); margin-bottom: 1rem;">🔑 Rejoindre un Duel via Code</h3>
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-lg);">
+          <h3 style="font-family: var(--font-title); font-size: 1.2rem; color: var(--accent-purple); margin-bottom: 1rem;">🔑 Rejoindre un Duel via Code</h3>
 
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Code du Salon (Ex: DUEL-A8F2) :</label>
           <input type="text" id="input-duel-code" placeholder="Entrez le code DUEL-XXXX..." style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; font-weight: 700; text-transform: uppercase; margin-bottom: 1.25rem;">
@@ -136,8 +146,8 @@
       </div>
 
       <!-- Active Arena Match Display -->
-      <div id="duel-arena-box" style="display: none; background: rgba(255,255,255,0.03); border: 2px solid var(--accent-purple); border-radius: var(--radius-lg); padding: 2rem; margin-bottom: 2.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <div id="duel-arena-box" style="display: none; background: rgba(255,255,255,0.03); border: 2px solid var(--accent-purple); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 2.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <span style="font-size: 2rem;" id="arena-user-avatar">🎓</span>
             <div>
@@ -165,15 +175,15 @@
 
       <!-- Leaderboard Table Section -->
       <div class="section-title">🏆 Classement Général des Joueurs</div>
-      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 500px;">
           <thead>
             <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-size: 0.85rem;">
-              <th style="padding: 1rem;">Rang</th>
-              <th style="padding: 1rem;">Joueur</th>
-              <th style="padding: 1rem;">Niveau</th>
-              <th style="padding: 1rem;">Pièces 🪙</th>
-              <th style="padding: 1rem;">Victoires ⚔️</th>
+              <th style="padding: 0.85rem 1rem;">Rang</th>
+              <th style="padding: 0.85rem 1rem;">Joueur</th>
+              <th style="padding: 0.85rem 1rem;">Niveau</th>
+              <th style="padding: 0.85rem 1rem;">Pièces 🪙</th>
+              <th style="padding: 0.85rem 1rem;">Victoires ⚔️</th>
             </tr>
           </thead>
           <tbody id="leaderboard-tbody">
@@ -241,8 +251,8 @@
         <div style="color: var(--text-secondary); margin-bottom: 1.5rem;" id="fc-progress">Carte 1/10</div>
 
         <!-- Direct Flashcard Container -->
-        <div id="fc-card-box" style="background: rgba(255,255,255,0.04); border: 2px solid var(--border-color); border-radius: var(--radius-lg); padding: 2rem; min-height: 220px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: left; position: relative;">
-          <h3 id="fc-question-text" style="font-family: var(--font-title); font-size: 1.25rem; font-weight: 600; line-height: 1.5; margin-bottom: 1.25rem; width: 100%;">Question</h3>
+        <div id="fc-card-box" style="background: rgba(255,255,255,0.04); border: 2px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.75rem; min-height: 220px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: left; position: relative;">
+          <h3 id="fc-question-text" style="font-family: var(--font-title); font-size: 1.2rem; font-weight: 600; line-height: 1.5; margin-bottom: 1.25rem; width: 100%;">Question</h3>
 
           <div id="fc-answer-box" style="border-top: 1px solid var(--border-color); padding-top: 1.25rem; width: 100%;">
             <div style="color: var(--accent-green); font-weight: 700; font-size: 1.15rem; margin-bottom: 0.5rem;" id="fc-correct-text">Réponse</div>
@@ -262,7 +272,7 @@
     <!-- 5. RESULTS SUMMARY VIEW -->
     <section id="results-view" class="view-section">
       <div class="quiz-container" style="text-align: center;">
-        <h2 style="font-family: var(--font-title); font-size: 2.2rem; margin-bottom: 0.5rem;">🎉 Session Terminée !</h2>
+        <h2 style="font-family: var(--font-title); font-size: 2rem; margin-bottom: 0.5rem;">🎉 Session Terminée !</h2>
         <p style="color: var(--text-secondary); margin-bottom: 2rem;">Voici le bilan et l'évolution de vos connaissances</p>
 
         <div class="stats-grid" style="margin-bottom: 2rem;">
@@ -355,7 +365,7 @@
       </div>
 
       <div class="section-title">Sauvegarde & Restauration</div>
-      <div style="display: flex; gap: 1rem;">
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
         <button class="btn-primary" id="btn-export-data">📥 Exporter Sauvegarde (JSON)</button>
         <label class="btn-secondary" style="cursor: pointer;">
           📤 Importer Sauvegarde
@@ -369,7 +379,7 @@
     <section id="csv-view" class="view-section">
       <div class="section-title">Importer un Nouveau Fichier de Cours (.csv / .txt)</div>
 
-      <div style="background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 3rem; text-align: center;" id="drop-zone-csv">
+      <div style="background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 2.5rem 1.5rem; text-align: center;" id="drop-zone-csv">
         <span style="font-size: 3.5rem;">📄</span>
         <h3 style="margin: 1rem 0 0.5rem 0; font-family: var(--font-title);">Glissez-déposez votre fichier de cours (.csv / .txt) ici</h3>
         <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Format : Question; Bonne Réponse; Mauvaise 1; Mauvaise 2; Mauvaise 3 (ou Question; Bonne Réponse)</p>

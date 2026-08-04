@@ -10843,12 +10843,14 @@ class QuizEngine {
 
 
 // --- File: js/multiplayer.js ---
-// Multiplayer Engine managing 1v1 Duels via Room Codes, Wager Escrow, and Leaderboard
+// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels
 
 
 
 class MultiplayerEngine {
   constructor() {
+    this.peer = null;
+    this.conn = null;
     this.activeRoom = null;
   }
 
@@ -10899,6 +10901,81 @@ class MultiplayerEngine {
     });
 
     return allPlayers;
+  }
+
+  initHostPeer(roomCode, roomData, onPlayerJoinedCallback, onDataReceivedCallback) {
+    const peerId = `remix_${roomCode.replace('-', '_').toLowerCase()}`;
+
+    if (window.Peer) {
+      try {
+        this.peer = new window.Peer(peerId);
+
+        this.peer.on('open', (id) => {
+          console.log('PeerJS Host Ready:', id);
+        });
+
+        this.peer.on('connection', (connection) => {
+          this.conn = connection;
+
+          this.conn.on('open', () => {
+            console.log('Player connected over WebRTC!');
+            // Send initial room setup data to guest
+            this.conn.send({ type: 'ROOM_SETUP', room: roomData });
+            if (onPlayerJoinedCallback) onPlayerJoinedCallback(this.conn);
+          });
+
+          this.conn.on('data', (data) => {
+            if (onDataReceivedCallback) onDataReceivedCallback(data);
+          });
+        });
+
+        this.peer.on('error', (err) => {
+          console.log('PeerJS Host Error / Fallback:', err);
+        });
+      } catch (e) {
+        console.error('PeerJS init failed:', e);
+      }
+    }
+  }
+
+  initGuestPeer(roomCode, onConnectedCallback, onDataReceivedCallback) {
+    const hostPeerId = `remix_${roomCode.replace('-', '_').toLowerCase()}`;
+
+    if (window.Peer) {
+      try {
+        this.peer = new window.Peer();
+
+        this.peer.on('open', () => {
+          this.conn = this.peer.connect(hostPeerId);
+
+          this.conn.on('open', () => {
+            console.log('Connected to Host WebRTC Peer!');
+            const profile = StorageManager.getProfile();
+            this.conn.send({
+              type: 'GUEST_JOINED',
+              guest: { name: profile.name, avatar: profile.avatar }
+            });
+            if (onConnectedCallback) onConnectedCallback(this.conn);
+          });
+
+          this.conn.on('data', (data) => {
+            if (onDataReceivedCallback) onDataReceivedCallback(data);
+          });
+        });
+
+        this.peer.on('error', (err) => {
+          console.log('PeerJS Guest Error / Fallback:', err);
+        });
+      } catch (e) {
+        console.error('PeerJS guest init failed:', e);
+      }
+    }
+  }
+
+  sendWebRTCData(payload) {
+    if (this.conn && this.conn.open) {
+      this.conn.send(payload);
+    }
   }
 
   static createRoom({ subject, wager, questionCount = 5 }) {
