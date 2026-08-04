@@ -46,6 +46,9 @@ export class MultiplayerEngine {
     defaultBots.forEach(bot => mapPlayers.set(bot.name.toLowerCase(), bot));
 
     registeredRealPlayers.forEach(player => {
+      const isValid = StorageManager.verifyAntiCheatToken(player);
+      if (!isValid) return; // STRICT FILTER: Exclude any non-verified/cheated accounts!
+
       const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
       mapPlayers.set(player.name.toLowerCase(), {
         name: player.name,
@@ -54,11 +57,13 @@ export class MultiplayerEngine {
         wins: player.wins,
         avatar: player.avatar,
         isUser: isMe,
-        isVerified: StorageManager.verifyAntiCheatToken(player)
+        isVerified: true
       });
     });
 
-    mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
+    if (isVerified) {
+      mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
+    }
 
     const allPlayers = Array.from(mapPlayers.values());
 

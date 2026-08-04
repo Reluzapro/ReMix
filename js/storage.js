@@ -1,4 +1,4 @@
-// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Cloud Database sync, and Anti-Cheat Checksum verification
+// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Cloud Database sync, and Anti-Cheat Checksum auto-purge
 import { DEFAULT_SUBJECTS } from './questionsData.js';
 
 const STORAGE_KEYS = {
@@ -142,12 +142,32 @@ export class StorageManager {
         return { ...DEFAULT_PROFILE };
       }
       const profile = JSON.parse(data);
+
+      // Strict Anti-Cheat Check: If profile was manually altered, auto-purge account!
+      if (!this.verifyAntiCheatToken(profile)) {
+        console.warn('Tampered account detected! Purging account...');
+        this.purgeCheatedAccount(profile.name);
+        return { ...DEFAULT_PROFILE };
+      }
+
       const merged = { ...DEFAULT_PROFILE, ...profile, stats: { ...DEFAULT_PROFILE.stats, ...(profile.stats || {}) } };
       return merged;
     } catch (e) {
       console.error('Error loading profile:', e);
       return { ...DEFAULT_PROFILE };
     }
+  }
+
+  static purgeCheatedAccount(userName) {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.USER_PROFILE);
+      const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
+      if (existing && userName) {
+        let registry = JSON.parse(existing);
+        registry = registry.filter(p => p.name.toLowerCase() !== userName.toLowerCase());
+        localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(registry));
+      }
+    } catch (e) {}
   }
 
   static saveProfile(profile) {
@@ -166,6 +186,9 @@ export class StorageManager {
     try {
       const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
       let registry = existing ? JSON.parse(existing) : [];
+
+      const isValid = this.verifyAntiCheatToken(profile);
+      if (!isValid) return; // Do not register unverified/cheated accounts
 
       const playerCard = {
         name: profile.name,
@@ -191,7 +214,15 @@ export class StorageManager {
   static getGlobalLeaderboardRegistry() {
     try {
       const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
-      return existing ? JSON.parse(existing) : [];
+      if (!existing) return [];
+      let registry = JSON.parse(existing);
+
+      // Purge any unverified cheated accounts from registry
+      const cleanRegistry = registry.filter(player => this.verifyAntiCheatToken(player));
+      if (cleanRegistry.length !== registry.length) {
+        localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(cleanRegistry));
+      }
+      return cleanRegistry;
     } catch (e) {
       return [];
     }
