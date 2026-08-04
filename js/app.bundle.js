@@ -10809,9 +10809,9 @@ class QuizEngine {
       this.currentSession.score = Math.max(0, this.currentSession.score + points);
       SoundFX.playWrong();
 
-      // Re-queue card 2 questions later in current session
+      // Re-queue card 20 questions later in current session
       const requeueQ = this.prepareQuestion(currentQ);
-      const targetPos = Math.min(this.currentSession.questions.length, this.currentSession.currentIndex + 3);
+      const targetPos = Math.min(this.currentSession.questions.length, this.currentSession.currentIndex + 21);
       this.currentSession.questions.splice(targetPos, 0, requeueQ);
 
       StorageManager.addRevisionItem(currentQ, this.currentSession.subjectId);
@@ -11625,7 +11625,7 @@ class AppController {
         if (currentQ.explanation) {
           msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
         }
-        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra dans 2 questions !</span>`;
+        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra 20 questions plus tard !</span>`;
 
         expText.innerHTML = msg;
         expBox.style.display = 'block';

@@ -499,7 +499,7 @@ class AppController {
         if (currentQ.explanation) {
           msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
         }
-        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra dans 2 questions !</span>`;
+        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra 20 questions plus tard !</span>`;
 
         expText.innerHTML = msg;
         expBox.style.display = 'block';
