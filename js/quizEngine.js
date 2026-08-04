@@ -117,11 +117,6 @@ export class QuizEngine {
       const points = GamificationEngine.calculatePoints(false, 0);
       this.currentSession.score = Math.max(0, this.currentSession.score + points);
 
-      // Time penalty: -5 seconds off the 3-minute session timer
-      if (this.currentSession.sessionTimer !== undefined) {
-        this.currentSession.sessionTimer = Math.max(0, this.currentSession.sessionTimer - 5);
-      }
-
       SoundFX.playWrong();
 
       // Re-queue card 20 questions later in current session

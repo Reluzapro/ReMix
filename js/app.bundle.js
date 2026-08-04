@@ -10814,11 +10814,6 @@ class QuizEngine {
       const points = GamificationEngine.calculatePoints(false, 0);
       this.currentSession.score = Math.max(0, this.currentSession.score + points);
 
-      // Time penalty: -5 seconds off the 3-minute session timer
-      if (this.currentSession.sessionTimer !== undefined) {
-        this.currentSession.sessionTimer = Math.max(0, this.currentSession.sessionTimer - 5);
-      }
-
       SoundFX.playWrong();
 
       // Re-queue card 20 questions later in current session
@@ -11641,7 +11636,7 @@ class AppController {
       const expText = document.getElementById('quiz-explanation-text');
 
       if (!result.wasCorrect) {
-        let msg = `❌ <strong>Réponse incorrecte (-10 pts, -5 sec)</strong><br>`;
+        let msg = `❌ <strong>Réponse incorrecte (-10 pts)</strong><br>`;
         msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
         if (currentQ.explanation) {
           msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;

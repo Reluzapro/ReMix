@@ -503,7 +503,7 @@ class AppController {
       const expText = document.getElementById('quiz-explanation-text');
 
       if (!result.wasCorrect) {
-        let msg = `❌ <strong>Réponse incorrecte (-10 pts, -5 sec)</strong><br>`;
+        let msg = `❌ <strong>Réponse incorrecte (-10 pts)</strong><br>`;
         msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
         if (currentQ.explanation) {
           msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
