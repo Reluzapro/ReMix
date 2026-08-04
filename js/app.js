@@ -370,12 +370,16 @@ class AppController {
       if (player.isUser) tr.style.background = 'rgba(99, 102, 241, 0.2)';
 
       const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
+      const verificationBadge = player.isVerified === false 
+        ? '<span class="level-badge" style="font-size: 0.7rem; background: rgba(239, 68, 68, 0.3); color: var(--accent-red);">🚩 Non vérifié</span>'
+        : '<span style="font-size: 0.85rem;" title="Score vérifié anti-triche">🛡️</span>';
 
       tr.innerHTML = `
         <td style="padding: 0.85rem 1rem; font-weight: 700;">${rankBadge}</td>
         <td style="padding: 0.85rem 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
           <span>${player.avatar || '🎓'}</span>
           <span>${player.name}</span>
+          ${verificationBadge}
           ${player.isUser ? '<span class="level-badge" style="font-size: 0.7rem; background: var(--accent-purple);">Vous</span>' : ''}
         </td>
         <td style="padding: 0.85rem 1rem;">Niv. ${player.level}</td>

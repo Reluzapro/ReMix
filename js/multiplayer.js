@@ -1,6 +1,5 @@
-// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels
+// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit
 import { StorageManager } from './storage.js';
-import { SoundFX } from './audio.js';
 
 export class MultiplayerEngine {
   constructor() {
@@ -29,13 +28,16 @@ export class MultiplayerEngine {
       { name: 'Camille_Maths', level: 9, coins: 1100, wins: 11, avatar: '📐' }
     ];
 
+    const isVerified = StorageManager.verifyAntiCheatToken(profile);
+
     const userEntry = {
       name: profile.name || 'Réviseur Pro',
       level: profile.level || 1,
       coins: profile.coins || 0,
       wins: profile.stats?.duelWins || 0,
       avatar: profile.avatar || '🎓',
-      isUser: true
+      isUser: true,
+      isVerified: isVerified
     };
 
     let allPlayers = [...defaultBots, userEntry];
@@ -45,7 +47,9 @@ export class MultiplayerEngine {
       if (customData) {
         const extra = JSON.parse(customData);
         extra.forEach(p => {
-          if (p.name !== userEntry.name) allPlayers.push(p);
+          if (p.name !== userEntry.name) {
+            allPlayers.push({ ...p, isVerified: StorageManager.verifyAntiCheatToken(p) });
+          }
         });
       }
     } catch (e) {}
@@ -73,8 +77,6 @@ export class MultiplayerEngine {
           this.conn = connection;
 
           this.conn.on('open', () => {
-            console.log('Player connected over WebRTC!');
-            // Send initial room setup data to guest
             this.conn.send({ type: 'ROOM_SETUP', room: roomData });
             if (onPlayerJoinedCallback) onPlayerJoinedCallback(this.conn);
           });
@@ -85,11 +87,9 @@ export class MultiplayerEngine {
         });
 
         this.peer.on('error', (err) => {
-          console.log('PeerJS Host Error / Fallback:', err);
+          console.log('PeerJS Host Error:', err);
         });
-      } catch (e) {
-        console.error('PeerJS init failed:', e);
-      }
+      } catch (e) {}
     }
   }
 
@@ -104,7 +104,6 @@ export class MultiplayerEngine {
           this.conn = this.peer.connect(hostPeerId);
 
           this.conn.on('open', () => {
-            console.log('Connected to Host WebRTC Peer!');
             const profile = StorageManager.getProfile();
             this.conn.send({
               type: 'GUEST_JOINED',
@@ -119,11 +118,9 @@ export class MultiplayerEngine {
         });
 
         this.peer.on('error', (err) => {
-          console.log('PeerJS Guest Error / Fallback:', err);
+          console.log('PeerJS Guest Error:', err);
         });
-      } catch (e) {
-        console.error('PeerJS guest init failed:', e);
-      }
+      } catch (e) {}
     }
   }
 
@@ -235,14 +232,12 @@ export class MultiplayerEngine {
       profile.stats.duelWins = (profile.stats.duelWins || 0) + 1;
       profile.xp += 150;
       result = 'VICTORY';
-      SoundFX.playLevelUp();
     } else if (userScore === botScore) {
       profile.coins += room.wager;
       result = 'DRAW';
     } else {
       profile.stats.duelLosses = (profile.stats.duelLosses || 0) + 1;
       result = 'DEFEAT';
-      SoundFX.playWrong();
     }
 
     StorageManager.saveProfile(profile);

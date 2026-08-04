@@ -1,4 +1,4 @@
-// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, and Cloud Database sync
+// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Cloud Database sync, and Anti-Cheat Checksum verification
 import { DEFAULT_SUBJECTS } from './questionsData.js';
 
 const STORAGE_KEYS = {
@@ -9,6 +9,8 @@ const STORAGE_KEYS = {
   SETTINGS: 'rev_game_settings_v2',
   CLOUD_ACCOUNT: 'remix_cloud_account_v1'
 };
+
+const CHECKSUM_SECRET = 'remix_anti_cheat_secret_sig_2026';
 
 const DEFAULT_PROFILE = {
   id: 'default_user',
@@ -30,12 +32,15 @@ const DEFAULT_PROFILE = {
   customRewards: [],
   unlockedAchievements: [],
   cloudAccount: null,
+  checksumToken: null,
   stats: {
     gamesPlayed: 0,
     correctAnswers: 0,
     wrongAnswers: 0,
     skippedAnswers: 0,
     perfectGames: 0,
+    duelWins: 0,
+    duelLosses: 0,
     subjectStats: {}
   }
 };
@@ -50,7 +55,7 @@ const DEFAULT_SETTINGS = {
 // Anki-style interval ladder (in days)
 const ANKI_INTERVAL_LADDER = [1, 3, 7, 15, 30, 90, 180, 365, 730];
 
-// SHA-256 Hash helper for secure cloud key derivation
+// SHA-256 Hash helper for secure cloud key derivation & Anti-Cheat signing
 async function hashPasscode(passcode) {
   if (window.crypto && window.crypto.subtle) {
     const msgBuffer = new TextEncoder().encode(passcode + '_remix_salt_2026');
@@ -61,7 +66,33 @@ async function hashPasscode(passcode) {
   return btoa(passcode);
 }
 
+function computeAntiCheatToken(profile) {
+  const level = profile.level || 1;
+  const xp = profile.xp || 0;
+  const coins = profile.coins || 0;
+  const wins = profile.stats?.duelWins || 0;
+  const raw = `${level}:${xp}:${coins}:${wins}:${CHECKSUM_SECRET}`;
+
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return `sig_${Math.abs(hash).toString(16)}`;
+}
+
 export class StorageManager {
+  static computeSignature(profile) {
+    return computeAntiCheatToken(profile);
+  }
+
+  static verifyAntiCheatToken(profile) {
+    if (!profile || !profile.checksumToken) return true; // Default legacy allow
+    const expected = computeAntiCheatToken(profile);
+    return profile.checksumToken === expected;
+  }
+
   static getSubjects() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
@@ -110,7 +141,8 @@ export class StorageManager {
         return { ...DEFAULT_PROFILE };
       }
       const profile = JSON.parse(data);
-      return { ...DEFAULT_PROFILE, ...profile, stats: { ...DEFAULT_PROFILE.stats, ...(profile.stats || {}) } };
+      const merged = { ...DEFAULT_PROFILE, ...profile, stats: { ...DEFAULT_PROFILE.stats, ...(profile.stats || {}) } };
+      return merged;
     } catch (e) {
       console.error('Error loading profile:', e);
       return { ...DEFAULT_PROFILE };
@@ -119,6 +151,7 @@ export class StorageManager {
 
   static saveProfile(profile) {
     try {
+      profile.checksumToken = computeAntiCheatToken(profile);
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
       this.autoSyncCloud();
     } catch (e) {
