@@ -5,8 +5,13 @@ const SUPABASE_KEY = 'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m';
 let _supabaseClient = null;
 
 function getDB() {
-  if (!_supabaseClient && window.supabase) {
-    _supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  if (_supabaseClient) return _supabaseClient;
+  try {
+    if (window.supabase && window.supabase.createClient) {
+      _supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+  } catch (e) {
+    console.log('Supabase init failed:', e.message);
   }
   return _supabaseClient;
 }
@@ -14,9 +19,9 @@ function getDB() {
 // --- LEADERBOARD ---
 
 export async function pushPlayerToCloud(playerCard) {
-  const db = getDB();
-  if (!db) return;
   try {
+    const db = getDB();
+    if (!db) return;
     await db.from('leaderboard').upsert({
       name: playerCard.name,
       level: playerCard.level || 1,
@@ -33,9 +38,9 @@ export async function pushPlayerToCloud(playerCard) {
 }
 
 export async function fetchCloudLeaderboard() {
-  const db = getDB();
-  if (!db) return [];
   try {
+    const db = getDB();
+    if (!db) return [];
     const { data, error } = await db
       .from('leaderboard')
       .select('*')
@@ -52,9 +57,9 @@ export async function fetchCloudLeaderboard() {
 // --- PROFILE SYNC (multi-device account) ---
 
 export async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData) {
-  const db = getDB();
-  if (!db) return;
   try {
+    const db = getDB();
+    if (!db) return;
     await db.from('profiles').upsert({
       username: username.toLowerCase(),
       hashed_key: hashedKey,
@@ -69,9 +74,9 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
 }
 
 export async function fetchProfileFromCloud(username, hashedKey) {
-  const db = getDB();
-  if (!db) return null;
   try {
+    const db = getDB();
+    if (!db) return null;
     const { data, error } = await db
       .from('profiles')
       .select('*')
