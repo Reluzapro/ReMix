@@ -10559,7 +10559,7 @@ class GamificationEngine {
   }
 
   static calculatePoints(isCorrect, streak, powerupActive = false) {
-    if (!isCorrect) return -5;
+    if (!isCorrect) return 0;
     let base = 10;
     let multiplier = 1;
     if (streak >= 10) multiplier = 3;
@@ -10808,6 +10808,11 @@ class QuizEngine {
       const points = GamificationEngine.calculatePoints(false, 0);
       this.currentSession.score = Math.max(0, this.currentSession.score + points);
       SoundFX.playWrong();
+
+      // Re-queue card 2 questions later in current session
+      const requeueQ = this.prepareQuestion(currentQ);
+      const targetPos = Math.min(this.currentSession.questions.length, this.currentSession.currentIndex + 3);
+      this.currentSession.questions.splice(targetPos, 0, requeueQ);
 
       StorageManager.addRevisionItem(currentQ, this.currentSession.subjectId);
     }
@@ -11592,12 +11597,17 @@ class AppController {
       selectedCard.classList.add('correct');
       selectedCard.querySelector('.opt-check').textContent = '✓';
     } else {
-      selectedCard.classList.add('wrong');
-      selectedCard.querySelector('.opt-check').textContent = '✗';
+      if (selectedCard) {
+        selectedCard.classList.add('wrong');
+        selectedCard.querySelector('.opt-check').textContent = '✗';
+      }
 
       allCards.forEach(c => {
-        if (c.innerHTML.includes(result.correctAnswer)) {
+        const text = c.querySelector('span')?.textContent || c.textContent;
+        if (text.includes(result.correctAnswer) || c.innerHTML.includes(result.correctAnswer)) {
           c.classList.add('correct');
+          const checkEl = c.querySelector('.opt-check');
+          if (checkEl) checkEl.textContent = '✓';
         }
       });
     }
@@ -11605,13 +11615,26 @@ class AppController {
     this.updateHeaderStats();
 
     const currentQ = this.quizEngine.currentSession?.questions[this.quizEngine.currentSession.currentIndex - 1];
-    if (currentQ && (currentQ.explanation || !result.wasCorrect)) {
+    if (currentQ) {
       const expBox = document.getElementById('quiz-explanation-box');
       const expText = document.getElementById('quiz-explanation-text');
 
-      let msg = currentQ.explanation ? currentQ.explanation : `La réponse exacte était : ${result.correctAnswer}`;
-      expText.innerHTML = msg;
-      expBox.style.display = 'block';
+      if (!result.wasCorrect) {
+        let msg = `❌ <strong>Réponse incorrecte (0 pt)</strong><br>`;
+        msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
+        if (currentQ.explanation) {
+          msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
+        }
+        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra dans 2 questions !</span>`;
+
+        expText.innerHTML = msg;
+        expBox.style.display = 'block';
+        this.triggerMathJax();
+      } else if (currentQ.explanation) {
+        expText.innerHTML = `💡 <em>${currentQ.explanation}</em>`;
+        expBox.style.display = 'block';
+        this.triggerMathJax();
+      }
     }
 
     const nextBtn = document.getElementById('quiz-next-btn');

@@ -46,7 +46,7 @@ export class GamificationEngine {
   }
 
   static calculatePoints(isCorrect, streak, powerupActive = false) {
-    if (!isCorrect) return -5;
+    if (!isCorrect) return 0;
     let base = 10;
     let multiplier = 1;
     if (streak >= 10) multiplier = 3;

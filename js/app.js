@@ -471,12 +471,17 @@ class AppController {
       selectedCard.classList.add('correct');
       selectedCard.querySelector('.opt-check').textContent = '✓';
     } else {
-      selectedCard.classList.add('wrong');
-      selectedCard.querySelector('.opt-check').textContent = '✗';
+      if (selectedCard) {
+        selectedCard.classList.add('wrong');
+        selectedCard.querySelector('.opt-check').textContent = '✗';
+      }
 
       allCards.forEach(c => {
-        if (c.innerHTML.includes(result.correctAnswer)) {
+        const text = c.querySelector('span')?.textContent || c.textContent;
+        if (text.includes(result.correctAnswer) || c.innerHTML.includes(result.correctAnswer)) {
           c.classList.add('correct');
+          const checkEl = c.querySelector('.opt-check');
+          if (checkEl) checkEl.textContent = '✓';
         }
       });
     }
@@ -484,13 +489,26 @@ class AppController {
     this.updateHeaderStats();
 
     const currentQ = this.quizEngine.currentSession?.questions[this.quizEngine.currentSession.currentIndex - 1];
-    if (currentQ && (currentQ.explanation || !result.wasCorrect)) {
+    if (currentQ) {
       const expBox = document.getElementById('quiz-explanation-box');
       const expText = document.getElementById('quiz-explanation-text');
 
-      let msg = currentQ.explanation ? currentQ.explanation : `La réponse exacte était : ${result.correctAnswer}`;
-      expText.innerHTML = msg;
-      expBox.style.display = 'block';
+      if (!result.wasCorrect) {
+        let msg = `❌ <strong>Réponse incorrecte (0 pt)</strong><br>`;
+        msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
+        if (currentQ.explanation) {
+          msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
+        }
+        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra dans 2 questions !</span>`;
+
+        expText.innerHTML = msg;
+        expBox.style.display = 'block';
+        this.triggerMathJax();
+      } else if (currentQ.explanation) {
+        expText.innerHTML = `💡 <em>${currentQ.explanation}</em>`;
+        expBox.style.display = 'block';
+        this.triggerMathJax();
+      }
     }
 
     const nextBtn = document.getElementById('quiz-next-btn');

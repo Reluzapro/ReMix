@@ -112,6 +112,11 @@ export class QuizEngine {
       this.currentSession.score = Math.max(0, this.currentSession.score + points);
       SoundFX.playWrong();
 
+      // Re-queue card 2 questions later in current session
+      const requeueQ = this.prepareQuestion(currentQ);
+      const targetPos = Math.min(this.currentSession.questions.length, this.currentSession.currentIndex + 3);
+      this.currentSession.questions.splice(targetPos, 0, requeueQ);
+
       StorageManager.addRevisionItem(currentQ, this.currentSession.subjectId);
     }
 
