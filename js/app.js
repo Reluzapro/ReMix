@@ -965,7 +965,12 @@ class AppController {
       });
     }
 
-    document.getElementById('btn-quick-play').addEventListener('click', () => {
+    const safeOn = (id, event, fn) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener(event, fn);
+    };
+
+    safeOn('btn-quick-play', 'click', () => {
       const subjects = Object.keys(StorageManager.getSubjects());
       const randomSub = subjects[Math.floor(Math.random() * subjects.length)];
       this.startQuiz(randomSub, 'classic');
@@ -987,11 +992,11 @@ class AppController {
       });
     });
 
-    document.getElementById('btn-export-data').addEventListener('click', () => {
+    safeOn('btn-export-data', 'click', () => {
       StorageManager.exportAllData();
     });
 
-    document.getElementById('input-import-data').addEventListener('change', (e) => {
+    safeOn('input-import-data', 'change', (e) => {
       if (e.target.files.length > 0) {
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -1007,12 +1012,11 @@ class AppController {
       }
     });
 
-    document.getElementById('btn-reset-data').addEventListener('click', async () => {
+    safeOn('btn-reset-data', 'click', async () => {
       const profile = StorageManager.getProfile();
       if (profile.cloudAccount) {
         const pass = prompt('🔐 Entrez votre mot de passe Cloud pour confirmer la réinitialisation :');
         if (!pass) return;
-        const { hashPasscodePublic } = window._remixUtils || {};
         const hashed = await StorageManager._hashPasscodeCheck(pass);
         if (hashed !== profile.cloudAccount.hashedKey) {
           alert('❌ Mot de passe incorrect. Réinitialisation annulée.');
@@ -1026,17 +1030,21 @@ class AppController {
     });
 
     const modal = document.getElementById('modal-custom-reward');
-    document.getElementById('btn-add-custom-reward').addEventListener('click', () => {
-      modal.classList.add('active');
+    safeOn('btn-add-custom-reward', 'click', () => {
+      if (modal) modal.classList.add('active');
     });
 
-    document.getElementById('btn-modal-cancel').addEventListener('click', () => {
-      modal.classList.remove('active');
+    safeOn('btn-modal-cancel', 'click', () => {
+      if (modal) modal.classList.remove('active');
     });
 
-    document.getElementById('btn-modal-save-reward').addEventListener('click', () => {
-      const title = document.getElementById('input-reward-title').value.trim();
-      const cost = parseInt(document.getElementById('input-reward-cost').value, 10);
+    safeOn('btn-modal-save-reward', 'click', () => {
+      const titleInput = document.getElementById('input-reward-title');
+      const costInput = document.getElementById('input-reward-cost');
+      if (!titleInput || !costInput) return;
+
+      const title = titleInput.value.trim();
+      const cost = parseInt(costInput.value, 10);
 
       if (!title || isNaN(cost) || cost <= 0) {
         alert('Veuillez spécifier un titre et un coût valide.');
@@ -1052,7 +1060,7 @@ class AppController {
       });
 
       StorageManager.saveProfile(profile);
-      modal.classList.remove('active');
+      if (modal) modal.classList.remove('active');
       this.renderShop();
     });
   }
@@ -1062,46 +1070,46 @@ function startApp() {
   const app = new AppController();
   app.init();
 
+  const safeOn = (id, event, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, fn);
+  };
+
   // Show Cloud Login popup on first visit if no account
   const profile = StorageManager.getProfile();
-  if (!profile.cloudAccount) {
+  if (!profile || !profile.cloudAccount || !profile.cloudAccount.username) {
     setTimeout(() => {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.add('active');
-    }, 500);
+    }, 300);
   }
 
   // Cloud login modal events
-  const btnModalCloudLogin = document.getElementById('btn-modal-cloud-login-submit');
-  if (btnModalCloudLogin) {
-    btnModalCloudLogin.addEventListener('click', async () => {
-      const username = document.getElementById('modal-cloud-user').value.trim();
-      const passcode = document.getElementById('modal-cloud-pass').value.trim();
-      if (!username || !passcode) { alert('Veuillez saisir un pseudo et un mot de passe !'); return; }
-      const res = await StorageManager.loginCloudAccount(username, passcode);
-      if (res.success) {
-        document.getElementById('modal-cloud-login').classList.remove('active');
-        SoundFX.playLevelUp();
-        app.init();
-      }
-    });
-  }
-
-  const btnModalCloudSkip = document.getElementById('btn-modal-cloud-skip');
-  if (btnModalCloudSkip) {
-    btnModalCloudSkip.addEventListener('click', () => {
-      document.getElementById('modal-cloud-login').classList.remove('active');
-    });
-  }
-
-  // Also hook profile view cloud login button to open the modal
-  const btnCloudLogin = document.getElementById('btn-cloud-login');
-  if (btnCloudLogin) {
-    btnCloudLogin.addEventListener('click', () => {
+  safeOn('btn-modal-cloud-login-submit', 'click', async () => {
+    const userInput = document.getElementById('modal-cloud-user');
+    const passInput = document.getElementById('modal-cloud-pass');
+    if (!userInput || !passInput) return;
+    const username = userInput.value.trim();
+    const passcode = passInput.value.trim();
+    if (!username || !passcode) { alert('Veuillez saisir un pseudo et un mot de passe !'); return; }
+    const res = await StorageManager.loginCloudAccount(username, passcode);
+    if (res.success) {
       const modal = document.getElementById('modal-cloud-login');
-      if (modal) modal.classList.add('active');
-    });
-  }
+      if (modal) modal.classList.remove('active');
+      SoundFX.playLevelUp();
+      app.init();
+    }
+  });
+
+  safeOn('btn-modal-cloud-skip', 'click', () => {
+    const modal = document.getElementById('modal-cloud-login');
+    if (modal) modal.classList.remove('active');
+  });
+
+  safeOn('btn-open-cloud-modal', 'click', () => {
+    const modal = document.getElementById('modal-cloud-login');
+    if (modal) modal.classList.add('active');
+  });
 }
 
 if (document.readyState === 'loading') {
