@@ -12193,7 +12193,7 @@ class AppController {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function startApp() {
   const app = new AppController();
   app.init();
 
@@ -12203,7 +12203,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.add('active');
-    }, 800);
+    }, 500);
   }
 
   // Cloud login modal events
@@ -12228,7 +12228,22 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('modal-cloud-login').classList.remove('active');
     });
   }
-});
+
+  // Also hook profile view cloud login button to open the modal
+  const btnCloudLogin = document.getElementById('btn-cloud-login');
+  if (btnCloudLogin) {
+    btnCloudLogin.addEventListener('click', () => {
+      const modal = document.getElementById('modal-cloud-login');
+      if (modal) modal.classList.add('active');
+    });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startApp);
+} else {
+  startApp();
+}
 
 
 })();
