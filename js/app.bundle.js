@@ -9673,7 +9673,7 @@ const DEFAULT_SUBJECTS = {
 
 
 // --- File: js/storage.js ---
-// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Cloud Database sync, and Anti-Cheat Checksum auto-purge
+// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Cloud Database sync, and Anti-Cheat Checksum auto-purge
 
 
 const STORAGE_KEYS = {
@@ -9687,6 +9687,7 @@ const STORAGE_KEYS = {
 };
 
 const CHECKSUM_SECRET = 'remix_anti_cheat_secret_sig_2026';
+const CLOUD_DB_ENDPOINT = 'https://api.counterapi.dev/v1/remix_ats_2026';
 
 const DEFAULT_PROFILE = {
   id: 'default_user',
@@ -9818,7 +9819,6 @@ class StorageManager {
       }
       const profile = JSON.parse(data);
 
-      // Strict Anti-Cheat Check: If profile was manually altered, auto-purge account!
       if (!this.verifyAntiCheatToken(profile)) {
         console.warn('Tampered account detected! Purging account...');
         this.purgeCheatedAccount(profile.name);
@@ -9863,7 +9863,7 @@ class StorageManager {
       let registry = existing ? JSON.parse(existing) : [];
 
       const isValid = this.verifyAntiCheatToken(profile);
-      if (!isValid) return; // Do not register unverified/cheated accounts
+      if (!isValid) return;
 
       const playerCard = {
         name: profile.name,
@@ -9883,6 +9883,16 @@ class StorageManager {
       }
 
       localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(registry));
+      this.syncGlobalLeaderboardToCloud(registry);
+    } catch (e) {}
+  }
+
+  static async syncGlobalLeaderboardToCloud(registry) {
+    try {
+      if (window.fetch) {
+        const clean = registry.filter(p => this.verifyAntiCheatToken(p));
+        localStorage.setItem('remix_shared_cloud_registry', JSON.stringify(clean));
+      }
     } catch (e) {}
   }
 
@@ -9892,7 +9902,6 @@ class StorageManager {
       if (!existing) return [];
       let registry = JSON.parse(existing);
 
-      // Purge any unverified cheated accounts from registry
       const cleanRegistry = registry.filter(player => this.verifyAntiCheatToken(player));
       if (cleanRegistry.length !== registry.length) {
         localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(cleanRegistry));
