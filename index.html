@@ -345,7 +345,7 @@
       <div style="background: var(--bg-card); border: 1px solid var(--accent-purple); padding: 1.5rem; border-radius: var(--radius-lg); margin-bottom: 2.5rem;">
         <h3 style="font-family: var(--font-title); font-size: 1.15rem; color: var(--accent-cyan); margin-bottom: 0.5rem;">☁️ Compte Cloud & Synchronisation Multi-Appareils</h3>
         <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Connectez-vous sur tous vos appareils (téléphone, PC) pour conserver vos pièces, vos niveaux, vos cours et apparaître dans le classement mondial !</p>
-        <button class="btn-primary" id="btn-open-cloud-modal" style="width: 100%; padding: 0.85rem; font-size: 1rem;">☁️ Connexion / Inscription au Compte Cloud</button>
+        <button class="btn-primary" id="btn-open-cloud-modal" onclick="document.getElementById('modal-cloud-login').classList.add('active')" style="width: 100%; padding: 0.85rem; font-size: 1rem; cursor: pointer;">☁️ Connexion / Inscription au Compte Cloud</button>
         <div id="cloud-sync-status" style="margin-top: 0.75rem; font-size: 0.85rem; font-weight: 600; text-align: center;"></div>
       </div>
 
@@ -398,7 +398,7 @@
 
   <!-- Modal Custom Reward -->
   <!-- Cloud Login Modal (shown on first visit) -->
-  <div class="modal-overlay" id="modal-cloud-login">
+  <div class="modal-overlay" id="modal-cloud-login" onclick="if(event.target===this) this.classList.remove('active')">
     <div class="modal-card" style="max-width: 420px;">
       <div style="text-align: center; margin-bottom: 1.5rem;">
         <div style="font-size: 3rem; margin-bottom: 0.5rem;">☁️</div>
@@ -410,8 +410,8 @@
         <input type="password" id="modal-cloud-pass" autocomplete="current-password" placeholder="Mot de passe secret" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
       </div>
       <div style="display: flex; gap: 0.75rem;">
-        <button id="btn-modal-cloud-login-submit" class="btn-primary" style="flex: 1; padding: 0.85rem;">🚀 Se connecter / Créer</button>
-        <button id="btn-modal-cloud-skip" class="btn-secondary" style="padding: 0.85rem 1.25rem;">Plus tard</button>
+        <button id="btn-modal-cloud-login-submit" class="btn-primary" style="flex: 1; padding: 0.85rem; cursor: pointer;">🚀 Se connecter / Créer</button>
+        <button id="btn-modal-cloud-skip" onclick="document.getElementById('modal-cloud-login').classList.remove('active')" class="btn-secondary" style="padding: 0.85rem 1.25rem; cursor: pointer;">Plus tard</button>
       </div>
       <p style="color: var(--text-secondary); font-size: 0.75rem; text-align: center; margin-top: 1rem;">🔐 Votre mot de passe est haché en SHA-256 — jamais visible, même par nous.</p>
     </div>
@@ -432,6 +432,6 @@
     </div>
   </div>
 
-  <script src="js/app.bundle.js?v=cloud5"></script>
+  <script src="js/app.bundle.js?v=cloud6"></script>
 </body>
 </html>
