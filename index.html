@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ReMix - Jeu de Révision Gamifié</title>
-  <meta name="description" content="Révisez vos cours et paquets Anki avec ReMix, l'application de révision gamifiée complète avec MathJax, duels 1v1 en ligne et répétition espacée !">
+  <meta name="description" content="Révisez vos cours et paquets Anki avec ReMix, l'application de révision gamifiée complète avec MathJax, duels 1v1 en ligne, compte cloud et répétition espacée !">
   <meta name="theme-color" content="#0b0f19">
   <link rel="stylesheet" href="style.css">
 
@@ -337,6 +337,20 @@
           <p style="color: var(--text-secondary); margin-top: 0.5rem;" id="prof-level-info">Niveau 1 (0 / 120 XP)</p>
           <button class="btn-secondary" id="btn-change-username" style="margin-top: 0.5rem; padding: 0.35rem 0.75rem; font-size: 0.8rem;">✏️ Modifier mon Pseudo</button>
         </div>
+      </div>
+
+      <!-- Cloud Account Card -->
+      <div style="background: var(--bg-card); border: 1px solid var(--accent-purple); padding: 1.5rem; border-radius: var(--radius-lg); margin-bottom: 2.5rem;">
+        <h3 style="font-family: var(--font-title); font-size: 1.15rem; color: var(--accent-cyan); margin-bottom: 0.5rem;">☁️ Compte Cloud & Synchronisation Téléphone / Ordi</h3>
+        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Connectez-vous avec vos identifiants sur tous vos appareils pour conserver le même niveau, vos pièces et votre progression Anki !</p>
+
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+          <input type="text" id="input-cloud-user" placeholder="Pseudo (Ex: Remi_ATS)" style="flex: 1; min-width: 180px; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white;">
+          <input type="password" id="input-cloud-pass" placeholder="Mot de passe secret" style="flex: 1; min-width: 180px; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white;">
+        </div>
+
+        <button class="btn-primary" id="btn-cloud-login" style="width: 100%;">Se Connecter / Synchroniser mon Compte ☁️</button>
+        <div id="cloud-sync-status" style="margin-top: 0.75rem; font-size: 0.85rem; font-weight: 600; text-align: center;"></div>
       </div>
 
       <div class="section-title">Statistiques Globales</div>

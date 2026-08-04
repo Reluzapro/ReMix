@@ -361,7 +361,6 @@ class AppController {
       select.innerHTML += `<option value="${sub.id}">${sub.name} (${sub.questions ? sub.questions.length : 0} cartes)</option>`;
     });
 
-    // Populate Leaderboard Table
     const leaderboard = MultiplayerEngine.getLeaderboard();
     const tbody = document.getElementById('leaderboard-tbody');
     tbody.innerHTML = '';
@@ -373,15 +372,15 @@ class AppController {
       const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
 
       tr.innerHTML = `
-        <td style="padding: 1rem; font-weight: 700;">${rankBadge}</td>
-        <td style="padding: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+        <td style="padding: 0.85rem 1rem; font-weight: 700;">${rankBadge}</td>
+        <td style="padding: 0.85rem 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
           <span>${player.avatar || '🎓'}</span>
           <span>${player.name}</span>
           ${player.isUser ? '<span class="level-badge" style="font-size: 0.7rem; background: var(--accent-purple);">Vous</span>' : ''}
         </td>
-        <td style="padding: 1rem;">Niv. ${player.level}</td>
-        <td style="padding: 1rem; color: var(--accent-amber); font-weight: 700;">${player.coins} 🪙</td>
-        <td style="padding: 1rem; color: var(--accent-green); font-weight: 700;">${player.wins || 0}</td>
+        <td style="padding: 0.85rem 1rem;">Niv. ${player.level}</td>
+        <td style="padding: 0.85rem 1rem; color: var(--accent-amber); font-weight: 700;">${player.coins} 🪙</td>
+        <td style="padding: 0.85rem 1rem; color: var(--accent-green); font-weight: 700;">${player.wins || 0}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -730,6 +729,12 @@ class AppController {
     document.getElementById('prof-title').textContent = GamificationEngine.getLevelTitle(profile.level);
     document.getElementById('prof-level-info').textContent = `Niveau ${profile.level} (${profile.xp} / ${GamificationEngine.getRequiredXP(profile.level)} XP)`;
 
+    const cloudStatus = document.getElementById('cloud-sync-status');
+    if (cloudStatus && profile.cloudAccount) {
+      cloudStatus.style.color = 'var(--accent-green)';
+      cloudStatus.textContent = `🟢 Connecté au Compte Cloud : ${profile.cloudAccount.username}`;
+    }
+
     const stats = profile.stats || {};
     document.getElementById('stat-games').textContent = stats.gamesPlayed || 0;
     document.getElementById('stat-correct').textContent = stats.correctAnswers || 0;
@@ -830,6 +835,29 @@ class AppController {
   }
 
   setupEventListeners() {
+    // Cloud Account Login Button
+    const btnCloudLogin = document.getElementById('btn-cloud-login');
+    if (btnCloudLogin) {
+      btnCloudLogin.addEventListener('click', () => {
+        const username = document.getElementById('input-cloud-user').value.trim();
+        const passcode = document.getElementById('input-cloud-pass').value.trim();
+        const statusEl = document.getElementById('cloud-sync-status');
+
+        if (!username || !passcode) {
+          alert('Veuillez saisir un pseudo et un mot de passe secret !');
+          return;
+        }
+
+        const res = StorageManager.loginCloudAccount(username, passcode);
+        if (res.success) {
+          statusEl.style.color = 'var(--accent-green)';
+          statusEl.textContent = res.isNew ? '✅ Compte Cloud créé ! Données synchronisées.' : '🚀 Connecté ! Données synchronisées entre vos appareils.';
+          SoundFX.playLevelUp();
+          this.init();
+        }
+      });
+    }
+
     // Change Username Button
     const btnChangeUser = document.getElementById('btn-change-username');
     if (btnChangeUser) {

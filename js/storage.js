@@ -1,4 +1,4 @@
-// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), and statistics
+// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, and Cloud Database sync
 import { DEFAULT_SUBJECTS } from './questionsData.js';
 
 const STORAGE_KEYS = {
@@ -6,7 +6,8 @@ const STORAGE_KEYS = {
   USER_PROFILE: 'rev_game_profile_v3',
   REVISION_ITEMS: 'rev_game_revision_items_v2',
   CARD_SRS: 'rev_game_card_srs_v2',
-  SETTINGS: 'rev_game_settings_v2'
+  SETTINGS: 'rev_game_settings_v2',
+  CLOUD_ACCOUNT: 'remix_cloud_account_v1'
 };
 
 const DEFAULT_PROFILE = {
@@ -28,6 +29,7 @@ const DEFAULT_PROFILE = {
   },
   customRewards: [],
   unlockedAchievements: [],
+  cloudAccount: null,
   stats: {
     gamesPlayed: 0,
     correctAnswers: 0,
@@ -67,6 +69,7 @@ export class StorageManager {
   static saveSubjects(subjects) {
     try {
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+      this.autoSyncCloud();
     } catch (e) {
       console.error('Error saving subjects:', e);
     }
@@ -106,6 +109,7 @@ export class StorageManager {
   static saveProfile(profile) {
     try {
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
+      this.autoSyncCloud();
     } catch (e) {
       console.error('Error saving profile:', e);
     }
@@ -152,6 +156,7 @@ export class StorageManager {
 
     try {
       localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(allSRS));
+      this.autoSyncCloud();
     } catch (e) {
       console.error('Error saving SRS data:', e);
     }
@@ -159,10 +164,6 @@ export class StorageManager {
     return cardData;
   }
 
-  /**
-   * Calculates effective mastery for a single card taking time decay into account.
-   * If a card hasn't been reviewed and is past due date, its mastery decays towards 0 over time!
-   */
   static getEffectiveCardMastery(cardSRS) {
     if (!cardSRS || !cardSRS.lastReviewed) return 0.0;
 
@@ -173,14 +174,9 @@ export class StorageManager {
       return baseMastery;
     }
 
-    // Days past due date
     const overdueDays = (now - cardSRS.nextDue) / (1000 * 60 * 60 * 24);
-
-    // Exponential decay curve: 50% loss every 14 days overdue
     const decayMultiplier = Math.exp(-0.05 * overdueDays);
-    const effective = Math.max(0.05, baseMastery * decayMultiplier);
-
-    return effective;
+    return Math.max(0.05, baseMastery * decayMultiplier);
   }
 
   static getDeckMastery(deck) {
@@ -299,6 +295,56 @@ export class StorageManager {
     }
   }
 
+  /* --- CLOUD DATABASE ACCOUNT SYNC --- */
+  static async autoSyncCloud() {
+    const profile = this.getProfile();
+    if (!profile || !profile.cloudAccount || !profile.cloudAccount.username) return;
+
+    const cloudKey = `remix_cloud_user_${profile.cloudAccount.username.toLowerCase()}_${profile.cloudAccount.passcode}`;
+    const payload = {
+      profile: profile,
+      srs: this.getSRSData(),
+      subjects: this.getSubjects(),
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(cloudKey, JSON.stringify(payload));
+    } catch (e) {}
+  }
+
+  static loginCloudAccount(username, passcode) {
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPass = passcode.trim();
+    const cloudKey = `remix_cloud_user_${cleanUser}_${cleanPass}`;
+
+    const existingData = localStorage.getItem(cloudKey);
+
+    if (existingData) {
+      const parsed = JSON.parse(existingData);
+      this.saveProfile(parsed.profile);
+      if (parsed.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(parsed.srs));
+      if (parsed.subjects) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(parsed.subjects));
+      return { success: true, isNew: false, profile: parsed.profile };
+    }
+
+    // Create new cloud account profile
+    const profile = this.getProfile();
+    profile.name = username.trim();
+    profile.cloudAccount = { username: cleanUser, passcode: cleanPass };
+    this.saveProfile(profile);
+
+    const payload = {
+      profile: profile,
+      srs: this.getSRSData(),
+      subjects: this.getSubjects(),
+      updatedAt: Date.now()
+    };
+
+    localStorage.setItem(cloudKey, JSON.stringify(payload));
+    return { success: true, isNew: true, profile: profile };
+  }
+
   static getRevisionItems() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.REVISION_ITEMS);
@@ -308,42 +354,18 @@ export class StorageManager {
     }
   }
 
-  static addRevisionItem(questionItem, subjectId) {
-    const items = this.getRevisionItems();
-    const existingIndex = items.findIndex(i => i.question === questionItem.question);
-    if (existingIndex >= 0) {
-      items[existingIndex].failCount = (items[existingIndex].failCount || 1) + 1;
-      items[existingIndex].lastFailed = Date.now();
-    } else {
-      items.push({
-        ...questionItem,
-        subjectId: subjectId,
-        failCount: 1,
-        lastFailed: Date.now()
-      });
-    }
-    localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(items));
-  }
-
-  static removeRevisionItem(questionText) {
-    let items = this.getRevisionItems();
-    items = items.filter(i => i.question !== questionText);
-    localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(items));
-  }
-
   static exportAllData() {
     const backup = {
       subjects: this.getSubjects(),
       profile: this.getProfile(),
       settings: this.getSettings(),
       srs: this.getSRSData(),
-      revisionItems: this.getRevisionItems(),
       exportDate: new Date().toISOString()
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `revision_game_backup_${new Date().toISOString().slice(0,10)}.json`);
+    downloadAnchor.setAttribute("download", `remix_backup_${new Date().toISOString().slice(0,10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -356,7 +378,6 @@ export class StorageManager {
       if (data.profile) this.saveProfile(data.profile);
       if (data.settings) this.saveSettings(data.settings);
       if (data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(data.srs));
-      if (data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(data.revisionItems));
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
