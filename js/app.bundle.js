@@ -9672,8 +9672,99 @@ const DEFAULT_SUBJECTS = {
 };
 
 
+// --- File: js/cloudDB.js ---
+// Cloud Database module — Supabase integration for global leaderboard and multi-device profile sync
+const SUPABASE_URL = 'https://hsgrieghyfpzxuazfmvx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m';
+
+let _supabaseClient = null;
+
+function getDB() {
+  if (!_supabaseClient && window.supabase) {
+    _supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+  return _supabaseClient;
+}
+
+// --- LEADERBOARD ---
+
+export async function pushPlayerToCloud(playerCard) {
+  const db = getDB();
+  if (!db) return;
+  try {
+    await db.from('leaderboard').upsert({
+      name: playerCard.name,
+      level: playerCard.level || 1,
+      xp: playerCard.xp || 0,
+      coins: playerCard.coins || 0,
+      wins: playerCard.wins || 0,
+      avatar: playerCard.avatar || '🎓',
+      checksum_token: playerCard.checksumToken || '',
+      last_active: Date.now()
+    }, { onConflict: 'name' });
+  } catch (e) {
+    console.log('Leaderboard sync failed:', e.message);
+  }
+}
+
+export async function fetchCloudLeaderboard() {
+  const db = getDB();
+  if (!db) return [];
+  try {
+    const { data, error } = await db
+      .from('leaderboard')
+      .select('*')
+      .order('level', { ascending: false })
+      .order('coins', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.log('Leaderboard fetch failed:', e.message);
+    return [];
+  }
+}
+
+// --- PROFILE SYNC (multi-device account) ---
+
+export async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData) {
+  const db = getDB();
+  if (!db) return;
+  try {
+    await db.from('profiles').upsert({
+      username: username.toLowerCase(),
+      hashed_key: hashedKey,
+      profile_data: profile,
+      srs_data: srsData,
+      subjects_data: subjectsData,
+      updated_at: Date.now()
+    }, { onConflict: 'username,hashed_key' });
+  } catch (e) {
+    console.log('Profile cloud push failed:', e.message);
+  }
+}
+
+export async function fetchProfileFromCloud(username, hashedKey) {
+  const db = getDB();
+  if (!db) return null;
+  try {
+    const { data, error } = await db
+      .from('profiles')
+      .select('*')
+      .eq('username', username.toLowerCase())
+      .eq('hashed_key', hashedKey)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.log('Profile cloud fetch failed:', e.message);
+    return null;
+  }
+}
+
+
 // --- File: js/storage.js ---
-// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Cloud Database sync, and Anti-Cheat Checksum auto-purge
+// Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Supabase Cloud Database sync, and Anti-Cheat Checksum auto-purge
+
 
 
 const STORAGE_KEYS = {
@@ -9682,12 +9773,10 @@ const STORAGE_KEYS = {
   REVISION_ITEMS: 'rev_game_revision_items_v2',
   CARD_SRS: 'rev_game_card_srs_v2',
   SETTINGS: 'rev_game_settings_v2',
-  CLOUD_ACCOUNT: 'remix_cloud_account_v1',
   GLOBAL_LEADERBOARD: 'remix_global_leaderboard_v1'
 };
 
 const CHECKSUM_SECRET = 'remix_anti_cheat_secret_sig_2026';
-const CLOUD_DB_ENDPOINT = 'https://api.counterapi.dev/v1/remix_ats_2026';
 
 const DEFAULT_PROFILE = {
   id: 'default_user',
@@ -9729,10 +9818,8 @@ const DEFAULT_SETTINGS = {
   questionsPerSession: 10
 };
 
-// Anki-style interval ladder (in days)
 const ANKI_INTERVAL_LADDER = [1, 3, 7, 15, 30, 90, 180, 365, 730];
 
-// SHA-256 Hash helper for secure cloud key derivation & Anti-Cheat signing
 async function hashPasscode(passcode) {
   if (window.crypto && window.crypto.subtle) {
     const msgBuffer = new TextEncoder().encode(passcode + '_remix_salt_2026');
@@ -9749,7 +9836,6 @@ function computeAntiCheatToken(profile) {
   const coins = profile.coins || 0;
   const wins = profile.stats?.duelWins || 0;
   const raw = `${level}:${xp}:${coins}:${wins}:${CHECKSUM_SECRET}`;
-
   let hash = 0;
   for (let i = 0; i < raw.length; i++) {
     const char = raw.charCodeAt(i);
@@ -9773,25 +9859,17 @@ class StorageManager {
   static getSubjects() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
-      if (!data) {
-        this.saveSubjects(DEFAULT_SUBJECTS);
-        return DEFAULT_SUBJECTS;
-      }
+      if (!data) { this.saveSubjects(DEFAULT_SUBJECTS); return DEFAULT_SUBJECTS; }
       const custom = JSON.parse(data);
       return { ...DEFAULT_SUBJECTS, ...custom };
-    } catch (e) {
-      console.error('Error loading subjects:', e);
-      return DEFAULT_SUBJECTS;
-    }
+    } catch (e) { return DEFAULT_SUBJECTS; }
   }
 
   static saveSubjects(subjects) {
     try {
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
       this.autoSyncCloud();
-    } catch (e) {
-      console.error('Error saving subjects:', e);
-    }
+    } catch (e) {}
   }
 
   static addSubject(subject) {
@@ -9803,34 +9881,22 @@ class StorageManager {
 
   static removeSubject(subjectId) {
     const subjects = this.getSubjects();
-    if (subjects[subjectId]) {
-      delete subjects[subjectId];
-      this.saveSubjects(subjects);
-    }
+    if (subjects[subjectId]) { delete subjects[subjectId]; this.saveSubjects(subjects); }
     return subjects;
   }
 
   static getProfile() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.USER_PROFILE);
-      if (!data) {
-        this.saveProfile(DEFAULT_PROFILE);
-        return { ...DEFAULT_PROFILE };
-      }
+      if (!data) { this.saveProfile(DEFAULT_PROFILE); return { ...DEFAULT_PROFILE }; }
       const profile = JSON.parse(data);
-
       if (!this.verifyAntiCheatToken(profile)) {
-        console.warn('Tampered account detected! Purging account...');
+        console.warn('Tampered account detected! Purging...');
         this.purgeCheatedAccount(profile.name);
         return { ...DEFAULT_PROFILE };
       }
-
-      const merged = { ...DEFAULT_PROFILE, ...profile, stats: { ...DEFAULT_PROFILE.stats, ...(profile.stats || {}) } };
-      return merged;
-    } catch (e) {
-      console.error('Error loading profile:', e);
-      return { ...DEFAULT_PROFILE };
-    }
+      return { ...DEFAULT_PROFILE, ...profile, stats: { ...DEFAULT_PROFILE.stats, ...(profile.stats || {}) } };
+    } catch (e) { return { ...DEFAULT_PROFILE }; }
   }
 
   static purgeCheatedAccount(userName) {
@@ -9851,48 +9917,32 @@ class StorageManager {
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
       this.registerGlobalPlayer(profile);
       this.autoSyncCloud();
-    } catch (e) {
-      console.error('Error saving profile:', e);
-    }
+    } catch (e) {}
   }
 
   static registerGlobalPlayer(profile) {
     if (!profile || !profile.name) return;
+    if (!this.verifyAntiCheatToken(profile)) return;
     try {
       const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
       let registry = existing ? JSON.parse(existing) : [];
-
-      const isValid = this.verifyAntiCheatToken(profile);
-      if (!isValid) return;
-
       const playerCard = {
         name: profile.name,
         level: profile.level || 1,
+        xp: profile.xp || 0,
         coins: profile.coins || 0,
         wins: profile.stats?.duelWins || 0,
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
         lastActive: Date.now()
       };
-
       const idx = registry.findIndex(p => p.name.toLowerCase() === profile.name.toLowerCase());
-      if (idx >= 0) {
-        registry[idx] = playerCard;
-      } else {
-        registry.push(playerCard);
-      }
-
+      if (idx >= 0) registry[idx] = playerCard;
+      else registry.push(playerCard);
       localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(registry));
-      this.syncGlobalLeaderboardToCloud(registry);
-    } catch (e) {}
-  }
 
-  static async syncGlobalLeaderboardToCloud(registry) {
-    try {
-      if (window.fetch) {
-        const clean = registry.filter(p => this.verifyAntiCheatToken(p));
-        localStorage.setItem('remix_shared_cloud_registry', JSON.stringify(clean));
-      }
+      // Sync to real Supabase Cloud DB
+      pushPlayerToCloud(playerCard).catch(() => {});
     } catch (e) {}
   }
 
@@ -9900,40 +9950,23 @@ class StorageManager {
     try {
       const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
       if (!existing) return [];
-      let registry = JSON.parse(existing);
-
-      const cleanRegistry = registry.filter(player => this.verifyAntiCheatToken(player));
-      if (cleanRegistry.length !== registry.length) {
-        localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(cleanRegistry));
-      }
-      return cleanRegistry;
-    } catch (e) {
-      return [];
-    }
+      const registry = JSON.parse(existing);
+      return registry.filter(p => this.verifyAntiCheatToken(p));
+    } catch (e) { return []; }
   }
 
-  /* --- SRS Spaced Repetition Engine with Time-Decay --- */
+  /* --- SRS Engine --- */
   static getSRSData() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CARD_SRS);
       return data ? JSON.parse(data) : {};
-    } catch (e) {
-      return {};
-    }
+    } catch (e) { return {}; }
   }
 
   static updateCardSRS(cardId, isCorrect) {
     const allSRS = this.getSRSData();
     const now = Date.now();
-
-    let cardData = allSRS[cardId] || {
-      reps: 0,
-      intervalDays: 1,
-      easeFactor: 2.5,
-      lastReviewed: null,
-      nextDue: now,
-      baseMastery: 0.0
-    };
+    let cardData = allSRS[cardId] || { reps: 0, intervalDays: 1, easeFactor: 2.5, lastReviewed: null, nextDue: now, baseMastery: 0.0 };
 
     if (isCorrect) {
       const repIdx = Math.min(cardData.reps, ANKI_INTERVAL_LADDER.length - 1);
@@ -9950,173 +9983,89 @@ class StorageManager {
     cardData.lastReviewed = now;
     cardData.nextDue = now + (cardData.intervalDays * 24 * 60 * 60 * 1000);
     allSRS[cardId] = cardData;
-
     try {
       localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(allSRS));
       this.autoSyncCloud();
-    } catch (e) {
-      console.error('Error saving SRS data:', e);
-    }
-
+    } catch (e) {}
     return cardData;
   }
 
   static getEffectiveCardMastery(cardSRS) {
     if (!cardSRS || !cardSRS.lastReviewed) return 0.0;
-
     const now = Date.now();
     const baseMastery = cardSRS.baseMastery !== undefined ? cardSRS.baseMastery : 0.8;
-
-    if (now <= cardSRS.nextDue) {
-      return baseMastery;
-    }
-
+    if (now <= cardSRS.nextDue) return baseMastery;
     const overdueDays = (now - cardSRS.nextDue) / (1000 * 60 * 60 * 24);
-    const decayMultiplier = Math.exp(-0.05 * overdueDays);
-    return Math.max(0.05, baseMastery * decayMultiplier);
+    return Math.max(0.05, baseMastery * Math.exp(-0.05 * overdueDays));
   }
 
   static getDeckMastery(deck) {
-    if (!deck || !deck.questions || deck.questions.length === 0) {
-      return { percentage: 0, colorHex: '#9ca3af', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.1)' };
-    }
-
+    if (!deck || !deck.questions || deck.questions.length === 0) return { percentage: 0, colorHex: '#9ca3af', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.1)' };
     const allSRS = this.getSRSData();
-    let totalMastery = 0;
-    let reviewedCount = 0;
-
+    let totalMastery = 0, reviewedCount = 0;
     deck.questions.forEach(q => {
       const cardSRS = allSRS[q.id];
-      if (cardSRS && cardSRS.lastReviewed) {
-        totalMastery += this.getEffectiveCardMastery(cardSRS);
-        reviewedCount += 1;
-      }
+      if (cardSRS && cardSRS.lastReviewed) { totalMastery += this.getEffectiveCardMastery(cardSRS); reviewedCount++; }
     });
-
-    if (reviewedCount === 0) {
-      return { percentage: 0, colorHex: '#6b7280', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.15)' };
-    }
-
+    if (reviewedCount === 0) return { percentage: 0, colorHex: '#6b7280', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.15)' };
     const percentage = Math.round((totalMastery / deck.questions.length) * 100);
-
-    if (percentage >= 75) {
-      return {
-        percentage,
-        colorHex: '#10b981',
-        statusText: `🟢 ${percentage}% Maîtrisé`,
-        borderStyle: '1px solid #10b981',
-        boxShadow: '0 0 12px rgba(16, 185, 129, 0.4)'
-      };
-    } else if (percentage >= 40) {
-      return {
-        percentage,
-        colorHex: '#f59e0b',
-        statusText: `🟡 ${percentage}% À réviser bientôt`,
-        borderStyle: '1px solid #f59e0b',
-        boxShadow: '0 0 12px rgba(245, 158, 11, 0.4)'
-      };
-    } else {
-      return {
-        percentage,
-        colorHex: '#ef4444',
-        statusText: `🔴 ${percentage}% À réviser d'urgence`,
-        borderStyle: '1px solid #ef4444',
-        boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)'
-      };
-    }
+    if (percentage >= 75) return { percentage, colorHex: '#10b981', statusText: `🟢 ${percentage}% Maîtrisé`, borderStyle: '1px solid #10b981', boxShadow: '0 0 12px rgba(16, 185, 129, 0.4)' };
+    if (percentage >= 40) return { percentage, colorHex: '#f59e0b', statusText: `🟡 ${percentage}% À réviser bientôt`, borderStyle: '1px solid #f59e0b', boxShadow: '0 0 12px rgba(245, 158, 11, 0.4)' };
+    return { percentage, colorHex: '#ef4444', statusText: `🔴 ${percentage}% À réviser d'urgence`, borderStyle: '1px solid #ef4444', boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)' };
   }
 
   static getFolderMastery(deckList) {
-    if (!deckList || deckList.length === 0) {
-      return { percentage: 0, colorHex: '#6b7280', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.15)' };
-    }
-
+    if (!deckList || deckList.length === 0) return { percentage: 0, colorHex: '#6b7280', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.15)' };
     let sumMastery = 0;
-    deckList.forEach(deck => {
-      const res = this.getDeckMastery(deck);
-      sumMastery += res.percentage;
-    });
-
-    const folderPercentage = Math.round(sumMastery / deckList.length);
-
-    if (folderPercentage >= 75) {
-      return {
-        percentage: folderPercentage,
-        colorHex: '#10b981',
-        statusText: `🟢 ${folderPercentage}% Maîtrisé`,
-        borderStyle: '1px solid #10b981',
-        boxShadow: '0 0 14px rgba(16, 185, 129, 0.45)'
-      };
-    } else if (folderPercentage >= 40) {
-      return {
-        percentage: folderPercentage,
-        colorHex: '#f59e0b',
-        statusText: `🟡 ${folderPercentage}% En désuétude`,
-        borderStyle: '1px solid #f59e0b',
-        boxShadow: '0 0 14px rgba(245, 158, 11, 0.45)'
-      };
-    } else if (folderPercentage > 0) {
-      return {
-        percentage: folderPercentage,
-        colorHex: '#ef4444',
-        statusText: `🔴 ${folderPercentage}% À réviser d'urgence`,
-        borderStyle: '1px solid #ef4444',
-        boxShadow: '0 0 14px rgba(239, 68, 68, 0.45)'
-      };
-    } else {
-      return {
-        percentage: 0,
-        colorHex: '#6b7280',
-        statusText: '⚪ Non révisé',
-        borderStyle: 'rgba(255, 255, 255, 0.15)',
-        boxShadow: 'none'
-      };
-    }
+    deckList.forEach(deck => { const res = this.getDeckMastery(deck); sumMastery += res.percentage; });
+    const p = Math.round(sumMastery / deckList.length);
+    if (p >= 75) return { percentage: p, colorHex: '#10b981', statusText: `🟢 ${p}% Maîtrisé`, borderStyle: '1px solid #10b981', boxShadow: '0 0 14px rgba(16, 185, 129, 0.45)' };
+    if (p >= 40) return { percentage: p, colorHex: '#f59e0b', statusText: `🟡 ${p}% En désuétude`, borderStyle: '1px solid #f59e0b', boxShadow: '0 0 14px rgba(245, 158, 11, 0.45)' };
+    if (p > 0) return { percentage: p, colorHex: '#ef4444', statusText: `🔴 ${p}% À réviser d'urgence`, borderStyle: '1px solid #ef4444', boxShadow: '0 0 14px rgba(239, 68, 68, 0.45)' };
+    return { percentage: 0, colorHex: '#6b7280', statusText: '⚪ Non révisé', borderStyle: 'rgba(255, 255, 255, 0.15)', boxShadow: 'none' };
   }
 
   static getSettings() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      if (!data) return { ...DEFAULT_SETTINGS };
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
-    } catch (e) {
-      return { ...DEFAULT_SETTINGS };
-    }
+      return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : { ...DEFAULT_SETTINGS };
+    } catch (e) { return { ...DEFAULT_SETTINGS }; }
   }
 
   static saveSettings(settings) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-    } catch (e) {
-      console.error('Error saving settings:', e);
-    }
+    try { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch (e) {}
   }
 
-  /* --- CRYPTOGRAPHICALLY SECURE CLOUD DATABASE ACCOUNT SYNC --- */
+  /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   static async autoSyncCloud() {
     const profile = this.getProfile();
-    if (!profile || !profile.cloudAccount || !profile.cloudAccount.username || !profile.cloudAccount.hashedKey) return;
-
-    const cloudKey = `remix_cloud_db_${profile.cloudAccount.username.toLowerCase()}_${profile.cloudAccount.hashedKey}`;
-    const payload = {
-      profile: profile,
-      srs: this.getSRSData(),
-      subjects: this.getSubjects(),
-      updatedAt: Date.now()
-    };
-
-    try {
-      localStorage.setItem(cloudKey, JSON.stringify(payload));
-    } catch (e) {}
+    if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return;
+    const { username, hashedKey } = profile.cloudAccount;
+    // Also update localStorage cloud key for offline fallback
+    const cloudKey = `remix_cloud_db_${username}_${hashedKey}`;
+    const payload = { profile, srs: this.getSRSData(), subjects: this.getSubjects(), updatedAt: Date.now() };
+    try { localStorage.setItem(cloudKey, JSON.stringify(payload)); } catch (e) {}
+    // Sync to Supabase
+    pushProfileToCloud(username, hashedKey, profile, this.getSRSData(), this.getSubjects()).catch(() => {});
   }
 
   static async loginCloudAccount(username, passcode) {
     const cleanUser = username.trim().toLowerCase();
     const hashedKey = await hashPasscode(passcode);
-    const cloudKey = `remix_cloud_db_${cleanUser}_${hashedKey}`;
 
-    const existingData = localStorage.getItem(cloudKey);
+    // Try Supabase Cloud first
+    const cloudData = await fetchProfileFromCloud(cleanUser, hashedKey);
+    if (cloudData) {
+      const profile = cloudData.profile_data;
+      this.saveProfile(profile);
+      if (cloudData.srs_data) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
+      if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
+      return { success: true, isNew: false, profile };
+    }
 
+    // Fallback: check localStorage
+    const localKey = `remix_cloud_db_${cleanUser}_${hashedKey}`;
+    const existingData = localStorage.getItem(localKey);
     if (existingData) {
       const parsed = JSON.parse(existingData);
       this.saveProfile(parsed.profile);
@@ -10125,46 +10074,29 @@ class StorageManager {
       return { success: true, isNew: false, profile: parsed.profile };
     }
 
+    // New account
     const profile = this.getProfile();
     profile.name = username.trim();
-    profile.cloudAccount = { username: cleanUser, hashedKey: hashedKey };
+    profile.cloudAccount = { username: cleanUser, hashedKey };
     this.saveProfile(profile);
-
-    const payload = {
-      profile: profile,
-      srs: this.getSRSData(),
-      subjects: this.getSubjects(),
-      updatedAt: Date.now()
-    };
-
-    localStorage.setItem(cloudKey, JSON.stringify(payload));
-    return { success: true, isNew: true, profile: profile };
+    pushProfileToCloud(cleanUser, hashedKey, profile, this.getSRSData(), this.getSubjects()).catch(() => {});
+    return { success: true, isNew: true, profile };
   }
 
   static getRevisionItems() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.REVISION_ITEMS);
       return data ? JSON.parse(data) : [];
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
   static exportAllData() {
-    const backup = {
-      subjects: this.getSubjects(),
-      profile: this.getProfile(),
-      settings: this.getSettings(),
-      srs: this.getSRSData(),
-      exportDate: new Date().toISOString()
-    };
+    const backup = { subjects: this.getSubjects(), profile: this.getProfile(), settings: this.getSettings(), srs: this.getSRSData(), exportDate: new Date().toISOString() };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `remix_backup_${new Date().toISOString().slice(0,10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    const a = document.createElement('a');
+    a.setAttribute("href", dataStr);
+    a.setAttribute("download", `remix_backup_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
   static importData(jsonContent) {
@@ -10175,17 +10107,11 @@ class StorageManager {
       if (data.settings) this.saveSettings(data.settings);
       if (data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(data.srs));
       return { success: true };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    } catch (e) { return { success: false, error: e.message }; }
   }
 
   static resetAllData() {
-    localStorage.removeItem(STORAGE_KEYS.SUBJECTS);
-    localStorage.removeItem(STORAGE_KEYS.USER_PROFILE);
-    localStorage.removeItem(STORAGE_KEYS.REVISION_ITEMS);
-    localStorage.removeItem(STORAGE_KEYS.CARD_SRS);
-    localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+    Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
   }
 }
 
@@ -10991,7 +10917,8 @@ class QuizEngine {
 
 
 // --- File: js/multiplayer.js ---
-// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit & Real Players Leaderboard
+// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels — with Supabase Global Leaderboard
+
 
 
 class MultiplayerEngine {
@@ -11004,37 +10931,49 @@ class MultiplayerEngine {
   static generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
-    for (let i = 0; i < 4; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
     return `DUEL-${code}`;
   }
 
-  static getLeaderboard() {
+  // Returns leaderboard from Supabase Cloud (real players worldwide), falls back to localStorage
+  static async getLeaderboard() {
     const profile = StorageManager.getProfile();
     const isVerified = StorageManager.verifyAntiCheatToken(profile);
 
     const userEntry = {
       name: profile.name || 'Réviseur Pro',
       level: profile.level || 1,
+      xp: profile.xp || 0,
       coins: profile.coins || 0,
       wins: profile.stats?.duelWins || 0,
       avatar: profile.avatar || '🎓',
       isUser: true,
-      isVerified: isVerified
+      isVerified
     };
 
-    const registeredRealPlayers = StorageManager.getGlobalLeaderboardRegistry();
+    // Fetch from Supabase Cloud
+    let cloudPlayers = await fetchCloudLeaderboard();
+
+    // Fall back to localStorage if cloud unavailable
+    if (!cloudPlayers || cloudPlayers.length === 0) {
+      cloudPlayers = StorageManager.getGlobalLeaderboardRegistry().map(p => ({
+        name: p.name, level: p.level, xp: p.xp || 0, coins: p.coins, wins: p.wins,
+        avatar: p.avatar, checksum_token: p.checksumToken
+      }));
+    }
+
     const mapPlayers = new Map();
 
-    registeredRealPlayers.forEach(player => {
-      const isValid = StorageManager.verifyAntiCheatToken(player);
-      if (!isValid) return; // STRICT FILTER: Exclude any non-verified/cheated accounts!
+    cloudPlayers.forEach(player => {
+      const profileLike = { ...player, checksumToken: player.checksum_token, stats: { duelWins: player.wins } };
+      const isValid = StorageManager.verifyAntiCheatToken(profileLike);
+      if (!isValid) return; // Strict: skip cheated accounts
 
       const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
       mapPlayers.set(player.name.toLowerCase(), {
         name: player.name,
         level: player.level,
+        xp: player.xp || 0,
         coins: player.coins,
         wins: player.wins,
         avatar: player.avatar,
@@ -11043,120 +10982,72 @@ class MultiplayerEngine {
       });
     });
 
+    // Always include local user
     if (isVerified) {
       mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
     }
 
-    const allPlayers = Array.from(mapPlayers.values());
-
-    allPlayers.sort((a, b) => {
+    return Array.from(mapPlayers.values()).sort((a, b) => {
       if (b.level !== a.level) return b.level - a.level;
       return b.coins - a.coins;
     });
-
-    return allPlayers;
   }
 
   initHostPeer(roomCode, roomData, onPlayerJoinedCallback, onDataReceivedCallback) {
     const peerId = `remix_${roomCode.replace('-', '_').toLowerCase()}`;
-
     if (window.Peer) {
       try {
         this.peer = new window.Peer(peerId);
-
-        this.peer.on('open', (id) => {
-          console.log('PeerJS Host Ready:', id);
-        });
-
-        this.peer.on('connection', (connection) => {
+        this.peer.on('open', id => console.log('PeerJS Host Ready:', id));
+        this.peer.on('connection', connection => {
           this.conn = connection;
-
           this.conn.on('open', () => {
             this.conn.send({ type: 'ROOM_SETUP', room: roomData });
             if (onPlayerJoinedCallback) onPlayerJoinedCallback(this.conn);
           });
-
-          this.conn.on('data', (data) => {
-            if (onDataReceivedCallback) onDataReceivedCallback(data);
-          });
+          this.conn.on('data', data => { if (onDataReceivedCallback) onDataReceivedCallback(data); });
         });
-
-        this.peer.on('error', (err) => {
-          console.log('PeerJS Host Error:', err);
-        });
+        this.peer.on('error', err => console.log('PeerJS Host Error:', err));
       } catch (e) {}
     }
   }
 
   initGuestPeer(roomCode, onConnectedCallback, onDataReceivedCallback) {
     const hostPeerId = `remix_${roomCode.replace('-', '_').toLowerCase()}`;
-
     if (window.Peer) {
       try {
         this.peer = new window.Peer();
-
         this.peer.on('open', () => {
           this.conn = this.peer.connect(hostPeerId);
-
           this.conn.on('open', () => {
             const profile = StorageManager.getProfile();
-            this.conn.send({
-              type: 'GUEST_JOINED',
-              guest: { name: profile.name, avatar: profile.avatar }
-            });
+            this.conn.send({ type: 'GUEST_JOINED', guest: { name: profile.name, avatar: profile.avatar } });
             if (onConnectedCallback) onConnectedCallback(this.conn);
           });
-
-          this.conn.on('data', (data) => {
-            if (onDataReceivedCallback) onDataReceivedCallback(data);
-          });
+          this.conn.on('data', data => { if (onDataReceivedCallback) onDataReceivedCallback(data); });
         });
-
-        this.peer.on('error', (err) => {
-          console.log('PeerJS Guest Error:', err);
-        });
+        this.peer.on('error', err => console.log('PeerJS Guest Error:', err));
       } catch (e) {}
     }
   }
 
   sendWebRTCData(payload) {
-    if (this.conn && this.conn.open) {
-      this.conn.send(payload);
-    }
+    if (this.conn && this.conn.open) this.conn.send(payload);
   }
 
   static createRoom({ subject, wager, questionCount = 5 }) {
     const profile = StorageManager.getProfile();
-    if (profile.coins < wager) {
-      return { success: false, message: `Vous n'avez pas assez de pièces (${profile.coins} 🪙) pour parier ${wager} 🪙 !` };
-    }
-
+    if (profile.coins < wager) return { success: false, message: `Pièces insuffisantes (${profile.coins} 🪙 disponibles, ${wager} 🪙 requis) !` };
     const roomCode = this.generateRoomCode();
     const questions = [...subject.questions].sort(() => Math.random() - 0.5).slice(0, questionCount);
-
     const room = {
-      code: roomCode,
-      subjectId: subject.id,
-      subjectName: subject.name,
-      wager: wager,
-      host: {
-        name: profile.name,
-        avatar: profile.avatar,
-        score: 0,
-        currentIdx: 0,
-        finished: false
-      },
-      guest: null,
-      questions: questions,
-      status: 'WAITING_FOR_PLAYER',
-      createdTime: Date.now()
+      code: roomCode, subjectId: subject.id, subjectName: subject.name, wager,
+      host: { name: profile.name, avatar: profile.avatar, score: 0, currentIdx: 0, finished: false },
+      guest: null, questions, status: 'WAITING_FOR_PLAYER', createdTime: Date.now()
     };
-
     profile.coins -= wager;
     StorageManager.saveProfile(profile);
-
     localStorage.setItem(`remix_room_${roomCode}`, JSON.stringify(room));
-
     return { success: true, roomCode, room };
   }
 
@@ -11164,53 +11055,27 @@ class MultiplayerEngine {
     const profile = StorageManager.getProfile();
     const formattedCode = roomCode.toUpperCase().trim();
     const roomData = localStorage.getItem(`remix_room_${formattedCode}`);
-
     if (!roomData) {
       const subjects = StorageManager.getSubjects();
-      const firstSubKey = Object.keys(subjects)[0];
-      const sub = subjects[firstSubKey];
-
-      const simRoom = {
-        code: formattedCode,
-        subjectId: sub.id,
-        subjectName: sub.name,
-        wager: 100,
+      const sub = Object.values(subjects)[0];
+      if (profile.coins < 100) return { success: false, message: 'Pièces insuffisantes (100 🪙 requis) !' };
+      profile.coins -= 100;
+      StorageManager.saveProfile(profile);
+      return { success: true, room: {
+        code: formattedCode, subjectId: sub.id, subjectName: sub.name, wager: 100,
         host: { name: 'Adversaire_En_Ligne', avatar: '⚔️', score: 0, currentIdx: 0, finished: false },
         guest: { name: profile.name, avatar: profile.avatar, score: 0, currentIdx: 0, finished: false },
         questions: [...sub.questions].sort(() => Math.random() - 0.5).slice(0, 5),
-        status: 'PLAYING',
-        createdTime: Date.now()
-      };
-
-      if (profile.coins < 100) {
-        return { success: false, message: 'Pièces insuffisantes (100 🪙 requis pour ce duel) !' };
-      }
-
-      profile.coins -= 100;
-      StorageManager.saveProfile(profile);
-
-      return { success: true, room: simRoom };
+        status: 'PLAYING', createdTime: Date.now()
+      }};
     }
-
     const room = JSON.parse(roomData);
-    if (profile.coins < room.wager) {
-      return { success: false, message: `Pièces insuffisantes ! Il vous faut ${room.wager} 🪙.` };
-    }
-
+    if (profile.coins < room.wager) return { success: false, message: `Pièces insuffisantes ! Il vous faut ${room.wager} 🪙.` };
     profile.coins -= room.wager;
     StorageManager.saveProfile(profile);
-
-    room.guest = {
-      name: profile.name,
-      avatar: profile.avatar,
-      score: 0,
-      currentIdx: 0,
-      finished: false
-    };
+    room.guest = { name: profile.name, avatar: profile.avatar, score: 0, currentIdx: 0, finished: false };
     room.status = 'PLAYING';
-
     localStorage.setItem(`remix_room_${formattedCode}`, JSON.stringify(room));
-
     return { success: true, room };
   }
 
@@ -11218,10 +11083,8 @@ class MultiplayerEngine {
     const profile = StorageManager.getProfile();
     profile.stats = profile.stats || {};
     profile.stats.duelPlayed = (profile.stats.duelPlayed || 0) + 1;
-
     const pot = room.wager * 2;
     let result = '';
-
     if (userScore > botScore) {
       profile.coins += pot;
       profile.stats.duelWins = (profile.stats.duelWins || 0) + 1;
@@ -11234,17 +11097,8 @@ class MultiplayerEngine {
       profile.stats.duelLosses = (profile.stats.duelLosses || 0) + 1;
       result = 'DEFEAT';
     }
-
     StorageManager.saveProfile(profile);
-
-    return {
-      result,
-      pot,
-      wager: room.wager,
-      coinsEarned: result === 'VICTORY' ? pot : (result === 'DRAW' ? room.wager : 0),
-      userScore,
-      botScore
-    };
+    return { result, pot, wager: room.wager, coinsEarned: result === 'VICTORY' ? pot : (result === 'DRAW' ? room.wager : 0), userScore, botScore };
   }
 }
 
@@ -11604,7 +11458,7 @@ class AppController {
     container.appendChild(card);
   }
 
-  renderDuelsView() {
+  async renderDuelsView() {
     const subjects = StorageManager.getSubjects();
     const select = document.getElementById('duel-subject-select');
     select.innerHTML = '';
@@ -11613,16 +11467,23 @@ class AppController {
       select.innerHTML += `<option value="${sub.id}">${sub.name} (${sub.questions ? sub.questions.length : 0} cartes)</option>`;
     });
 
-    const leaderboard = MultiplayerEngine.getLeaderboard();
     const tbody = document.getElementById('leaderboard-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; opacity: 0.6;">⏳ Chargement du classement mondial...</td></tr>';
+
+    const leaderboard = await MultiplayerEngine.getLeaderboard();
     tbody.innerHTML = '';
+
+    if (leaderboard.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; opacity: 0.6;">Aucun joueur encore — créez un Compte Cloud pour apparaître ici !</td></tr>';
+      return;
+    }
 
     leaderboard.forEach((player, idx) => {
       const tr = document.createElement('tr');
       if (player.isUser) tr.style.background = 'rgba(99, 102, 241, 0.2)';
 
       const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
-      const verificationBadge = player.isVerified === false 
+      const verificationBadge = player.isVerified === false
         ? '<span class="level-badge" style="font-size: 0.7rem; background: rgba(239, 68, 68, 0.3); color: var(--accent-red);">🚩 Non vérifié</span>'
         : '<span style="font-size: 0.85rem;" title="Score vérifié anti-triche">🛡️</span>';
 
@@ -11641,6 +11502,7 @@ class AppController {
       tbody.appendChild(tr);
     });
   }
+
 
   startQuiz(subjectId, mode = 'classic') {
     const subjects = StorageManager.getSubjects();

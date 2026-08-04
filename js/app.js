@@ -352,7 +352,7 @@ class AppController {
     container.appendChild(card);
   }
 
-  renderDuelsView() {
+  async renderDuelsView() {
     const subjects = StorageManager.getSubjects();
     const select = document.getElementById('duel-subject-select');
     select.innerHTML = '';
@@ -361,16 +361,23 @@ class AppController {
       select.innerHTML += `<option value="${sub.id}">${sub.name} (${sub.questions ? sub.questions.length : 0} cartes)</option>`;
     });
 
-    const leaderboard = MultiplayerEngine.getLeaderboard();
     const tbody = document.getElementById('leaderboard-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; opacity: 0.6;">⏳ Chargement du classement mondial...</td></tr>';
+
+    const leaderboard = await MultiplayerEngine.getLeaderboard();
     tbody.innerHTML = '';
+
+    if (leaderboard.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; opacity: 0.6;">Aucun joueur encore — créez un Compte Cloud pour apparaître ici !</td></tr>';
+      return;
+    }
 
     leaderboard.forEach((player, idx) => {
       const tr = document.createElement('tr');
       if (player.isUser) tr.style.background = 'rgba(99, 102, 241, 0.2)';
 
       const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
-      const verificationBadge = player.isVerified === false 
+      const verificationBadge = player.isVerified === false
         ? '<span class="level-badge" style="font-size: 0.7rem; background: rgba(239, 68, 68, 0.3); color: var(--accent-red);">🚩 Non vérifié</span>'
         : '<span style="font-size: 0.85rem;" title="Score vérifié anti-triche">🛡️</span>';
 
@@ -389,6 +396,7 @@ class AppController {
       tbody.appendChild(tr);
     });
   }
+
 
   startQuiz(subjectId, mode = 'classic') {
     const subjects = StorageManager.getSubjects();

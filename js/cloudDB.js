@@ -1,0 +1,87 @@
+// Cloud Database module — Supabase integration for global leaderboard and multi-device profile sync
+const SUPABASE_URL = 'https://hsgrieghyfpzxuazfmvx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m';
+
+let _supabaseClient = null;
+
+function getDB() {
+  if (!_supabaseClient && window.supabase) {
+    _supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+  return _supabaseClient;
+}
+
+// --- LEADERBOARD ---
+
+export async function pushPlayerToCloud(playerCard) {
+  const db = getDB();
+  if (!db) return;
+  try {
+    await db.from('leaderboard').upsert({
+      name: playerCard.name,
+      level: playerCard.level || 1,
+      xp: playerCard.xp || 0,
+      coins: playerCard.coins || 0,
+      wins: playerCard.wins || 0,
+      avatar: playerCard.avatar || '🎓',
+      checksum_token: playerCard.checksumToken || '',
+      last_active: Date.now()
+    }, { onConflict: 'name' });
+  } catch (e) {
+    console.log('Leaderboard sync failed:', e.message);
+  }
+}
+
+export async function fetchCloudLeaderboard() {
+  const db = getDB();
+  if (!db) return [];
+  try {
+    const { data, error } = await db
+      .from('leaderboard')
+      .select('*')
+      .order('level', { ascending: false })
+      .order('coins', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.log('Leaderboard fetch failed:', e.message);
+    return [];
+  }
+}
+
+// --- PROFILE SYNC (multi-device account) ---
+
+export async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData) {
+  const db = getDB();
+  if (!db) return;
+  try {
+    await db.from('profiles').upsert({
+      username: username.toLowerCase(),
+      hashed_key: hashedKey,
+      profile_data: profile,
+      srs_data: srsData,
+      subjects_data: subjectsData,
+      updated_at: Date.now()
+    }, { onConflict: 'username,hashed_key' });
+  } catch (e) {
+    console.log('Profile cloud push failed:', e.message);
+  }
+}
+
+export async function fetchProfileFromCloud(username, hashedKey) {
+  const db = getDB();
+  if (!db) return null;
+  try {
+    const { data, error } = await db
+      .from('profiles')
+      .select('*')
+      .eq('username', username.toLowerCase())
+      .eq('hashed_key', hashedKey)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.log('Profile cloud fetch failed:', e.message);
+    return null;
+  }
+}
