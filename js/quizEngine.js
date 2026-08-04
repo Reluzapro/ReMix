@@ -137,7 +137,13 @@ export class QuizEngine {
     const nextQ = this.getCurrentQuestion();
 
     if (!nextQ) {
-      return { isFinished: true, summary: this.finishSession() };
+      return {
+        isFinished: true,
+        nextQuestion: null,
+        wasCorrect: isCorrect,
+        correctAnswer: currentQ.correct,
+        summary: this.finishSession()
+      };
     }
 
     return { isFinished: false, nextQuestion: nextQ, wasCorrect: isCorrect, correctAnswer: currentQ.correct };

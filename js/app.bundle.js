@@ -10884,7 +10884,13 @@ class QuizEngine {
     const nextQ = this.getCurrentQuestion();
 
     if (!nextQ) {
-      return { isFinished: true, summary: this.finishSession() };
+      return {
+        isFinished: true,
+        nextQuestion: null,
+        wasCorrect: isCorrect,
+        correctAnswer: currentQ.correct,
+        summary: this.finishSession()
+      };
     }
 
     return { isFinished: false, nextQuestion: nextQ, wasCorrect: isCorrect, correctAnswer: currentQ.correct };
@@ -10976,7 +10982,7 @@ class QuizEngine {
 
 
 // --- File: js/multiplayer.js ---
-// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit & Shared Global Leaderboard
+// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit & Real Players Leaderboard
 
 
 class MultiplayerEngine {
@@ -10997,15 +11003,6 @@ class MultiplayerEngine {
 
   static getLeaderboard() {
     const profile = StorageManager.getProfile();
-
-    const defaultBots = [
-      { name: 'Sophie_ATS', level: 24, coins: 4800, wins: 42, avatar: '🧙‍♀️' },
-      { name: 'Lucas_Meca', level: 19, coins: 3200, wins: 31, avatar: '🥷' },
-      { name: 'Emma_Thermo', level: 15, coins: 2450, wins: 23, avatar: '🤖' },
-      { name: 'Thomas_Elec', level: 12, coins: 1800, wins: 18, avatar: '🎓' },
-      { name: 'Camille_Maths', level: 9, coins: 1100, wins: 11, avatar: '📐' }
-    ];
-
     const isVerified = StorageManager.verifyAntiCheatToken(profile);
 
     const userEntry = {
@@ -11020,8 +11017,6 @@ class MultiplayerEngine {
 
     const registeredRealPlayers = StorageManager.getGlobalLeaderboardRegistry();
     const mapPlayers = new Map();
-
-    defaultBots.forEach(bot => mapPlayers.set(bot.name.toLowerCase(), bot));
 
     registeredRealPlayers.forEach(player => {
       const isValid = StorageManager.verifyAntiCheatToken(player);
