@@ -9682,7 +9682,8 @@ const STORAGE_KEYS = {
   REVISION_ITEMS: 'rev_game_revision_items_v2',
   CARD_SRS: 'rev_game_card_srs_v2',
   SETTINGS: 'rev_game_settings_v2',
-  CLOUD_ACCOUNT: 'remix_cloud_account_v1'
+  CLOUD_ACCOUNT: 'remix_cloud_account_v1',
+  GLOBAL_LEADERBOARD: 'remix_global_leaderboard_v1'
 };
 
 const CHECKSUM_SECRET = 'remix_anti_cheat_secret_sig_2026';
@@ -9763,7 +9764,7 @@ class StorageManager {
   }
 
   static verifyAntiCheatToken(profile) {
-    if (!profile || !profile.checksumToken) return true; // Default legacy allow
+    if (!profile || !profile.checksumToken) return true;
     const expected = computeAntiCheatToken(profile);
     return profile.checksumToken === expected;
   }
@@ -9828,9 +9829,46 @@ class StorageManager {
     try {
       profile.checksumToken = computeAntiCheatToken(profile);
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
+      this.registerGlobalPlayer(profile);
       this.autoSyncCloud();
     } catch (e) {
       console.error('Error saving profile:', e);
+    }
+  }
+
+  static registerGlobalPlayer(profile) {
+    if (!profile || !profile.name) return;
+    try {
+      const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
+      let registry = existing ? JSON.parse(existing) : [];
+
+      const playerCard = {
+        name: profile.name,
+        level: profile.level || 1,
+        coins: profile.coins || 0,
+        wins: profile.stats?.duelWins || 0,
+        avatar: profile.avatar || '🎓',
+        checksumToken: profile.checksumToken,
+        lastActive: Date.now()
+      };
+
+      const idx = registry.findIndex(p => p.name.toLowerCase() === profile.name.toLowerCase());
+      if (idx >= 0) {
+        registry[idx] = playerCard;
+      } else {
+        registry.push(playerCard);
+      }
+
+      localStorage.setItem(STORAGE_KEYS.GLOBAL_LEADERBOARD, JSON.stringify(registry));
+    } catch (e) {}
+  }
+
+  static getGlobalLeaderboardRegistry() {
+    try {
+      const existing = localStorage.getItem(STORAGE_KEYS.GLOBAL_LEADERBOARD);
+      return existing ? JSON.parse(existing) : [];
+    } catch (e) {
+      return [];
     }
   }
 
@@ -10907,7 +10945,7 @@ class QuizEngine {
 
 
 // --- File: js/multiplayer.js ---
-// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit
+// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit & Shared Global Leaderboard
 
 
 class MultiplayerEngine {
@@ -10949,19 +10987,27 @@ class MultiplayerEngine {
       isVerified: isVerified
     };
 
-    let allPlayers = [...defaultBots, userEntry];
+    const registeredRealPlayers = StorageManager.getGlobalLeaderboardRegistry();
+    const mapPlayers = new Map();
 
-    try {
-      const customData = localStorage.getItem('remix_global_leaderboard');
-      if (customData) {
-        const extra = JSON.parse(customData);
-        extra.forEach(p => {
-          if (p.name !== userEntry.name) {
-            allPlayers.push({ ...p, isVerified: StorageManager.verifyAntiCheatToken(p) });
-          }
-        });
-      }
-    } catch (e) {}
+    defaultBots.forEach(bot => mapPlayers.set(bot.name.toLowerCase(), bot));
+
+    registeredRealPlayers.forEach(player => {
+      const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
+      mapPlayers.set(player.name.toLowerCase(), {
+        name: player.name,
+        level: player.level,
+        coins: player.coins,
+        wins: player.wins,
+        avatar: player.avatar,
+        isUser: isMe,
+        isVerified: StorageManager.verifyAntiCheatToken(player)
+      });
+    });
+
+    mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
+
+    const allPlayers = Array.from(mapPlayers.values());
 
     allPlayers.sort((a, b) => {
       if (b.level !== a.level) return b.level - a.level;

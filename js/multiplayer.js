@@ -1,4 +1,4 @@
-// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit
+// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels with Anti-Cheat audit & Shared Global Leaderboard
 import { StorageManager } from './storage.js';
 
 export class MultiplayerEngine {
@@ -40,19 +40,27 @@ export class MultiplayerEngine {
       isVerified: isVerified
     };
 
-    let allPlayers = [...defaultBots, userEntry];
+    const registeredRealPlayers = StorageManager.getGlobalLeaderboardRegistry();
+    const mapPlayers = new Map();
 
-    try {
-      const customData = localStorage.getItem('remix_global_leaderboard');
-      if (customData) {
-        const extra = JSON.parse(customData);
-        extra.forEach(p => {
-          if (p.name !== userEntry.name) {
-            allPlayers.push({ ...p, isVerified: StorageManager.verifyAntiCheatToken(p) });
-          }
-        });
-      }
-    } catch (e) {}
+    defaultBots.forEach(bot => mapPlayers.set(bot.name.toLowerCase(), bot));
+
+    registeredRealPlayers.forEach(player => {
+      const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
+      mapPlayers.set(player.name.toLowerCase(), {
+        name: player.name,
+        level: player.level,
+        coins: player.coins,
+        wins: player.wins,
+        avatar: player.avatar,
+        isUser: isMe,
+        isVerified: StorageManager.verifyAntiCheatToken(player)
+      });
+    });
+
+    mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
+
+    const allPlayers = Array.from(mapPlayers.values());
 
     allPlayers.sort((a, b) => {
       if (b.level !== a.level) return b.level - a.level;
