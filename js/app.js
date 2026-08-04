@@ -1021,11 +1021,22 @@ class AppController {
       }
     });
 
-    document.getElementById('btn-reset-data').addEventListener('click', () => {
-      if (confirm('Voulez-vous vraiment réinitialiser toutes vos données (points, cours, progression) ?')) {
-        StorageManager.resetAllData();
-        location.reload();
+    document.getElementById('btn-reset-data').addEventListener('click', async () => {
+      const profile = StorageManager.getProfile();
+      if (profile.cloudAccount) {
+        const pass = prompt('🔐 Entrez votre mot de passe Cloud pour confirmer la réinitialisation :');
+        if (!pass) return;
+        const { hashPasscodePublic } = window._remixUtils || {};
+        const hashed = await StorageManager._hashPasscodeCheck(pass);
+        if (hashed !== profile.cloudAccount.hashedKey) {
+          alert('❌ Mot de passe incorrect. Réinitialisation annulée.');
+          return;
+        }
+      } else {
+        if (!confirm('Voulez-vous vraiment réinitialiser toutes vos données (points, cours, progression) ?')) return;
       }
+      StorageManager.resetAllData();
+      location.reload();
     });
 
     const modal = document.getElementById('modal-custom-reward');
@@ -1064,4 +1075,36 @@ class AppController {
 document.addEventListener('DOMContentLoaded', () => {
   const app = new AppController();
   app.init();
+
+  // Show Cloud Login popup on first visit if no account
+  const profile = StorageManager.getProfile();
+  if (!profile.cloudAccount) {
+    setTimeout(() => {
+      const modal = document.getElementById('modal-cloud-login');
+      if (modal) modal.classList.add('active');
+    }, 800);
+  }
+
+  // Cloud login modal events
+  const btnModalCloudLogin = document.getElementById('btn-modal-cloud-login-submit');
+  if (btnModalCloudLogin) {
+    btnModalCloudLogin.addEventListener('click', async () => {
+      const username = document.getElementById('modal-cloud-user').value.trim();
+      const passcode = document.getElementById('modal-cloud-pass').value.trim();
+      if (!username || !passcode) { alert('Veuillez saisir un pseudo et un mot de passe !'); return; }
+      const res = await StorageManager.loginCloudAccount(username, passcode);
+      if (res.success) {
+        document.getElementById('modal-cloud-login').classList.remove('active');
+        SoundFX.playLevelUp();
+        app.init();
+      }
+    });
+  }
+
+  const btnModalCloudSkip = document.getElementById('btn-modal-cloud-skip');
+  if (btnModalCloudSkip) {
+    btnModalCloudSkip.addEventListener('click', () => {
+      document.getElementById('modal-cloud-login').classList.remove('active');
+    });
+  }
 });

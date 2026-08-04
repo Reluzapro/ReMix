@@ -403,6 +403,26 @@
   </main>
 
   <!-- Modal Custom Reward -->
+  <!-- Cloud Login Modal (shown on first visit) -->
+  <div class="modal-overlay" id="modal-cloud-login">
+    <div class="modal-card" style="max-width: 420px;">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div style="font-size: 3rem; margin-bottom: 0.5rem;">☁️</div>
+        <h3 style="font-family: var(--font-title); margin-bottom: 0.5rem;">Compte Cloud ReMix</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">Connectez-vous pour synchroniser votre progression entre tous vos appareils et apparaître dans le classement mondial !</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <input type="text" id="modal-cloud-user" placeholder="Pseudo (ex: Remi_ATS)" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
+        <input type="password" id="modal-cloud-pass" placeholder="Mot de passe secret" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
+      </div>
+      <div style="display: flex; gap: 0.75rem;">
+        <button id="btn-modal-cloud-login-submit" class="btn-primary" style="flex: 1; padding: 0.85rem;">🚀 Se connecter / Créer</button>
+        <button id="btn-modal-cloud-skip" class="btn-secondary" style="padding: 0.85rem 1.25rem;">Plus tard</button>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 0.75rem; text-align: center; margin-top: 1rem;">🔐 Votre mot de passe est haché en SHA-256 — jamais visible, même par nous.</p>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-custom-reward">
     <div class="modal-card">
       <h3 style="font-family: var(--font-title); margin-bottom: 1rem;">Ajouter une Récompense Personnelle</h3>

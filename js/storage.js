@@ -284,6 +284,16 @@ export class StorageManager {
     pushProfileToCloud(username, hashedKey, profile, this.getSRSData(), this.getSubjects()).catch(() => {});
   }
 
+  static async _hashPasscodeCheck(passcode) {
+    if (window.crypto && window.crypto.subtle) {
+      const msgBuffer = new TextEncoder().encode(passcode + '_remix_salt_2026');
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return btoa(passcode);
+  }
+
   static async loginCloudAccount(username, passcode) {
     const cleanUser = username.trim().toLowerCase();
     const hashedKey = await hashPasscode(passcode);
