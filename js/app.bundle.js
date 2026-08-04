@@ -11565,14 +11565,17 @@ class AppController {
     nextBtn.style.display = 'none';
     expBox.style.display = 'none';
 
-    document.getElementById('quiz-counter').textContent = `Question ${question.currentIndex + 1}/${question.totalQuestions}`;
+    const counter = document.getElementById('quiz-counter');
+    if (counter) counter.textContent = `Question ${question.currentIndex + 1}/${question.totalQuestions}`;
     
     const session = this.quizEngine.currentSession;
     const sessionTimeLeft = session ? session.sessionTimer : 180;
     const fillPercent = Math.min(100, Math.max(0, (sessionTimeLeft / 180) * 100));
-    document.getElementById('quiz-progress-bar').style.width = `${fillPercent}%`;
+    const progressBar = document.getElementById('quiz-progress-fill') || document.getElementById('quiz-progress-bar');
+    if (progressBar) progressBar.style.width = `${fillPercent}%`;
 
-    document.getElementById('quiz-score-badge').textContent = `${this.quizEngine.currentSession?.score || 0} Pts`;
+    const scoreBadge = document.getElementById('quiz-score-badge');
+    if (scoreBadge) scoreBadge.textContent = `${this.quizEngine.currentSession?.score || 0} Pts`;
 
     container.innerHTML = `
       <div class="question-card">
@@ -11751,7 +11754,7 @@ class AppController {
         if (timerEl) timerEl.textContent = timeStr;
 
         const fillPercent = Math.min(100, Math.max(0, (session.sessionTimer / 180) * 100));
-        const progressBar = document.getElementById('quiz-progress-bar');
+        const progressBar = document.getElementById('quiz-progress-fill') || document.getElementById('quiz-progress-bar');
         if (progressBar) progressBar.style.width = `${fillPercent}%`;
 
         if (session.sessionTimer <= 0) {
