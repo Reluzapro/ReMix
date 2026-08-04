@@ -9,12 +9,11 @@ export class QuizEngine {
     this.timerInterval = null;
   }
 
-  startSession({ subjectId, questions, mode = 'classic', timerSeconds = 20, questionCount = 10 }) {
+  startSession({ subjectId, questions, mode = 'classic', sessionTimerSeconds = 180 }) {
     if (!questions || questions.length === 0) {
       throw new Error('Aucune question disponible pour ce sujet.');
     }
 
-    // Sort questions prioritizing cards that are due or low mastery
     const allSRS = StorageManager.getSRSData();
     const now = Date.now();
 
@@ -29,22 +28,19 @@ export class QuizEngine {
       return mA - mB;
     });
 
-    if (mode === 'classic' && questionCount > 0 && questionCount < sortedQuestions.length) {
-      sortedQuestions = sortedQuestions.slice(0, questionCount);
-    }
+    const prepared = sortedQuestions.map(q => this.prepareQuestion(q));
 
     this.currentSession = {
       subjectId: subjectId,
       mode: mode,
-      questions: sortedQuestions.map(q => this.prepareQuestion(q)),
+      originalQuestions: [...questions],
+      questions: prepared,
       currentIndex: 0,
       score: 0,
       correctCount: 0,
       wrongCount: 0,
       skippedCount: 0,
-      timerSeconds: timerSeconds,
-      currentTimer: timerSeconds,
-      globalTimer: mode === 'timeAttack' ? 60 : null,
+      sessionTimer: sessionTimerSeconds || 180,
       streak: 0,
       multiplier: 1,
       powerupDoubleActive: false,
@@ -69,9 +65,19 @@ export class QuizEngine {
   }
 
   getCurrentQuestion() {
-    if (!this.currentSession || this.currentSession.currentIndex >= this.currentSession.questions.length) {
-      return null;
+    if (!this.currentSession) return null;
+
+    // Loop/extend pool if questions run low before 3-minute timer ends
+    if (this.currentSession.currentIndex >= this.currentSession.questions.length) {
+      const pool = this.currentSession.originalQuestions || [];
+      if (pool.length > 0) {
+        const extra = [...pool].sort(() => Math.random() - 0.5).map(q => this.prepareQuestion(q));
+        this.currentSession.questions.push(...extra);
+      } else {
+        return null;
+      }
     }
+
     return {
       ...this.currentSession.questions[this.currentSession.currentIndex],
       currentIndex: this.currentSession.currentIndex,
@@ -110,6 +116,12 @@ export class QuizEngine {
       this.currentSession.streak = 0;
       const points = GamificationEngine.calculatePoints(false, 0);
       this.currentSession.score = Math.max(0, this.currentSession.score + points);
+
+      // Time penalty: -5 seconds off the 3-minute session timer
+      if (this.currentSession.sessionTimer !== undefined) {
+        this.currentSession.sessionTimer = Math.max(0, this.currentSession.sessionTimer - 5);
+      }
+
       SoundFX.playWrong();
 
       // Re-queue card 20 questions later in current session

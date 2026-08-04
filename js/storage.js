@@ -49,7 +49,7 @@ const DEFAULT_PROFILE = {
 const DEFAULT_SETTINGS = {
   soundEnabled: true,
   volume: 0.7,
-  timerDuration: 20,
+  timerDuration: 180,
   questionsPerSession: 10
 };
 

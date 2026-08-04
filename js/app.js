@@ -407,14 +407,12 @@ class AppController {
     }
 
     this.currentSubjectId = subjectId;
-    const settings = StorageManager.getSettings();
 
     const firstQuestion = this.quizEngine.startSession({
       subjectId: subjectId,
       questions: sub.questions,
       mode: mode,
-      timerSeconds: settings.timerDuration || 20,
-      questionCount: settings.questionsPerSession || 10
+      sessionTimerSeconds: 180 // 3 minutes = 180 seconds
     });
 
     document.getElementById('quiz-subject-badge').textContent = sub.name;
@@ -426,17 +424,30 @@ class AppController {
   renderCurrentQuestion(question) {
     if (!question) return;
 
-    document.getElementById('quiz-counter').textContent = `Question ${question.currentIndex + 1}/${question.totalQuestions}`;
-    document.getElementById('quiz-question-text').innerHTML = question.question;
-
-    const fillPercent = ((question.currentIndex) / question.totalQuestions) * 100;
-    document.getElementById('quiz-progress-fill').style.width = `${fillPercent}%`;
-
+    const container = document.getElementById('quiz-question-container');
     const optionsContainer = document.getElementById('quiz-options-container');
-    optionsContainer.innerHTML = '';
+    const nextBtn = document.getElementById('quiz-next-btn');
+    const expBox = document.getElementById('quiz-explanation-box');
 
-    document.getElementById('quiz-explanation-box').style.display = 'none';
-    document.getElementById('quiz-next-btn').style.display = 'none';
+    nextBtn.style.display = 'none';
+    expBox.style.display = 'none';
+
+    document.getElementById('quiz-counter').textContent = `Question ${question.currentIndex + 1}/${question.totalQuestions}`;
+    
+    const session = this.quizEngine.currentSession;
+    const sessionTimeLeft = session ? session.sessionTimer : 180;
+    const fillPercent = Math.min(100, Math.max(0, (sessionTimeLeft / 180) * 100));
+    document.getElementById('quiz-progress-bar').style.width = `${fillPercent}%`;
+
+    document.getElementById('quiz-score-badge').textContent = `${this.quizEngine.currentSession?.score || 0} Pts`;
+
+    container.innerHTML = `
+      <div class="question-card">
+        <h3 class="question-title">${question.question}</h3>
+      </div>
+    `;
+
+    optionsContainer.innerHTML = '';
 
     this.updatePowerupButtons();
 
@@ -460,8 +471,6 @@ class AppController {
   }
 
   handleAnswerSelection(selectedCard, selectedOption) {
-    clearInterval(this.timerInterval);
-
     const result = this.quizEngine.submitAnswer(selectedOption);
 
     const allCards = document.querySelectorAll('.option-card');
@@ -494,7 +503,7 @@ class AppController {
       const expText = document.getElementById('quiz-explanation-text');
 
       if (!result.wasCorrect) {
-        let msg = `❌ <strong>Réponse incorrecte (0 pt)</strong><br>`;
+        let msg = `❌ <strong>Réponse incorrecte (-10 pts, -5 sec)</strong><br>`;
         msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
         if (currentQ.explanation) {
           msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
@@ -597,30 +606,24 @@ class AppController {
     const session = this.quizEngine.currentSession;
     if (!session) return;
 
-    session.currentTimer = session.timerSeconds;
     const timerEl = document.getElementById('quiz-timer');
 
     this.timerInterval = setInterval(() => {
-      if (session.mode === 'timeAttack' && session.globalTimer !== null) {
-        session.globalTimer -= 1;
-        timerEl.textContent = `${session.globalTimer}s`;
-        if (session.globalTimer <= 0) {
+      if (session.sessionTimer !== undefined) {
+        session.sessionTimer -= 1;
+        const m = Math.floor(Math.max(0, session.sessionTimer) / 60);
+        const s = Math.floor(Math.max(0, session.sessionTimer) % 60);
+        const timeStr = `⏱️ ${m}:${s < 10 ? '0' : ''}${s}`;
+
+        if (timerEl) timerEl.textContent = timeStr;
+
+        const fillPercent = Math.min(100, Math.max(0, (session.sessionTimer / 180) * 100));
+        const progressBar = document.getElementById('quiz-progress-bar');
+        if (progressBar) progressBar.style.width = `${fillPercent}%`;
+
+        if (session.sessionTimer <= 0) {
           clearInterval(this.timerInterval);
           this.showResults(this.quizEngine.finishSession());
-        }
-      } else {
-        session.currentTimer -= 1;
-        timerEl.textContent = `${session.currentTimer}s`;
-        if (session.currentTimer <= 0) {
-          clearInterval(this.timerInterval);
-
-          const result = this.quizEngine.submitAnswer('');
-          if (result.isFinished) {
-            this.showResults(result.summary);
-          } else {
-            this.renderCurrentQuestion(result.nextQuestion);
-            this.startTimer();
-          }
         }
       }
     }, 1000);
