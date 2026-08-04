@@ -838,7 +838,7 @@ class AppController {
     // Cloud Account Login Button
     const btnCloudLogin = document.getElementById('btn-cloud-login');
     if (btnCloudLogin) {
-      btnCloudLogin.addEventListener('click', () => {
+      btnCloudLogin.addEventListener('click', async () => {
         const username = document.getElementById('input-cloud-user').value.trim();
         const passcode = document.getElementById('input-cloud-pass').value.trim();
         const statusEl = document.getElementById('cloud-sync-status');
@@ -848,10 +848,10 @@ class AppController {
           return;
         }
 
-        const res = StorageManager.loginCloudAccount(username, passcode);
+        const res = await StorageManager.loginCloudAccount(username, passcode);
         if (res.success) {
           statusEl.style.color = 'var(--accent-green)';
-          statusEl.textContent = res.isNew ? '✅ Compte Cloud créé ! Données synchronisées.' : '🚀 Connecté ! Données synchronisées entre vos appareils.';
+          statusEl.textContent = res.isNew ? '✅ Compte Cloud sécurisé créé ! Données synchronisées.' : '🚀 Connecté ! Données synchronisées entre vos appareils.';
           SoundFX.playLevelUp();
           this.init();
         }

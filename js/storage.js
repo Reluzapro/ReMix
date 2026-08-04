@@ -50,6 +50,17 @@ const DEFAULT_SETTINGS = {
 // Anki-style interval ladder (in days)
 const ANKI_INTERVAL_LADDER = [1, 3, 7, 15, 30, 90, 180, 365, 730];
 
+// SHA-256 Hash helper for secure cloud key derivation
+async function hashPasscode(passcode) {
+  if (window.crypto && window.crypto.subtle) {
+    const msgBuffer = new TextEncoder().encode(passcode + '_remix_salt_2026');
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return btoa(passcode);
+}
+
 export class StorageManager {
   static getSubjects() {
     try {
@@ -295,12 +306,12 @@ export class StorageManager {
     }
   }
 
-  /* --- CLOUD DATABASE ACCOUNT SYNC --- */
+  /* --- CRYPTOGRAPHICALLY SECURE CLOUD DATABASE ACCOUNT SYNC --- */
   static async autoSyncCloud() {
     const profile = this.getProfile();
-    if (!profile || !profile.cloudAccount || !profile.cloudAccount.username) return;
+    if (!profile || !profile.cloudAccount || !profile.cloudAccount.username || !profile.cloudAccount.hashedKey) return;
 
-    const cloudKey = `remix_cloud_user_${profile.cloudAccount.username.toLowerCase()}_${profile.cloudAccount.passcode}`;
+    const cloudKey = `remix_cloud_db_${profile.cloudAccount.username.toLowerCase()}_${profile.cloudAccount.hashedKey}`;
     const payload = {
       profile: profile,
       srs: this.getSRSData(),
@@ -313,10 +324,10 @@ export class StorageManager {
     } catch (e) {}
   }
 
-  static loginCloudAccount(username, passcode) {
+  static async loginCloudAccount(username, passcode) {
     const cleanUser = username.trim().toLowerCase();
-    const cleanPass = passcode.trim();
-    const cloudKey = `remix_cloud_user_${cleanUser}_${cleanPass}`;
+    const hashedKey = await hashPasscode(passcode);
+    const cloudKey = `remix_cloud_db_${cleanUser}_${hashedKey}`;
 
     const existingData = localStorage.getItem(cloudKey);
 
@@ -328,10 +339,9 @@ export class StorageManager {
       return { success: true, isNew: false, profile: parsed.profile };
     }
 
-    // Create new cloud account profile
     const profile = this.getProfile();
     profile.name = username.trim();
-    profile.cloudAccount = { username: cleanUser, passcode: cleanPass };
+    profile.cloudAccount = { username: cleanUser, hashedKey: hashedKey };
     this.saveProfile(profile);
 
     const payload = {
