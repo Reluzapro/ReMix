@@ -10939,23 +10939,29 @@ class QuizEngine {
       throw new Error('Aucune question disponible pour ce sujet.');
     }
 
-    const allSRS = StorageManager.getSRSData();
-    const now = Date.now();
+    let finalQuestions;
 
-    let sortedQuestions = [...questions].sort((a, b) => {
-      const srsA = allSRS[a.id];
-      const srsB = allSRS[b.id];
-      const dueA = srsA ? (srsA.nextDue <= now ? 0 : 1) : 0;
-      const dueB = srsB ? (srsB.nextDue <= now ? 0 : 1) : 0;
-      if (dueA !== dueB) return dueA - dueB;
-      const mA = srsA ? srsA.mastery : -1;
-      const mB = srsB ? srsB.mastery : -1;
-      return mA - mB;
-    });
+    if (mode === 'duel') {
+      finalQuestions = [...questions];
+    } else {
+      const allSRS = StorageManager.getSRSData();
+      const now = Date.now();
 
-    let finalQuestions = sortedQuestions;
-    if (mode === 'classic') {
-      finalQuestions = sortedQuestions.slice(0, 10);
+      let sortedQuestions = [...questions].sort((a, b) => {
+        const srsA = allSRS[a.id];
+        const srsB = allSRS[b.id];
+        const dueA = srsA ? (srsA.nextDue <= now ? 0 : 1) : 0;
+        const dueB = srsB ? (srsB.nextDue <= now ? 0 : 1) : 0;
+        if (dueA !== dueB) return dueA - dueB;
+        const mA = srsA ? srsA.mastery : -1;
+        const mB = srsB ? srsB.mastery : -1;
+        return mA - mB;
+      });
+
+      finalQuestions = sortedQuestions;
+      if (mode === 'classic') {
+        finalQuestions = sortedQuestions.slice(0, 10);
+      }
     }
 
     const prepared = finalQuestions.map(q => this.prepareQuestion(q));
@@ -11201,25 +11207,348 @@ class QuizEngine {
 
 
 // --- File: js/multiplayer.js ---
-// Real-time WebRTC Multiplayer Engine using PeerJS for cross-network 1v1 Duels — with Supabase Global Leaderboard
+// Real-time Multiplayer Engine using Supabase Realtime for 1v1 Duels — with Global Leaderboard
 
 
+
+// Duel emojis available to all players (no purchase needed)
+const DUEL_EMOJIS = [
+  { id: 'fire', emoji: '🔥', label: 'Enflammé' },
+  { id: 'brain', emoji: '🧠', label: 'Cerveau' },
+  { id: 'rocket', emoji: '🚀', label: 'Fusée' },
+  { id: 'lightning', emoji: '⚡', label: 'Éclair' },
+  { id: 'trophy', emoji: '🏆', label: 'Trophée' },
+  { id: 'laugh', emoji: '😂', label: 'Rire' },
+  { id: 'cool', emoji: '😎', label: 'Cool' },
+  { id: 'party', emoji: '🎉', label: 'Fête' },
+  { id: 'exploding', emoji: '🤯', label: 'Mind Blown' },
+  { id: 'thinking', emoji: '🤔', label: 'Réflexion' }
+];
+
+export { DUEL_EMOJIS };
 
 class MultiplayerEngine {
   constructor() {
-    this.peer = null;
-    this.conn = null;
-    this.activeRoom = null;
+    this.channel = null;
+    this.currentBattleId = null;
+    this.matchmakingPollInterval = null;
   }
 
   static generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
-    for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-    return `DUEL-${code}`;
+    for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+    return code;
   }
 
-  // Returns leaderboard from Supabase Cloud (real players worldwide), falls back to localStorage
+  // --- Supabase DB helpers ---
+  static _getDB() {
+    if (window.supabase && window.supabase.createClient) {
+      // Reuse existing client or create one
+      if (!MultiplayerEngine._db) {
+        MultiplayerEngine._db = window.supabase.createClient(
+          'https://hsgrieghyfpzxuazfmvx.supabase.co',
+          'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m'
+        );
+      }
+      return MultiplayerEngine._db;
+    }
+    return null;
+  }
+
+  // --- Battle CRUD ---
+  static async createBattle({ code, subjectId, subjectName, wager, isPublic, player1Id, player1Name, player1Avatar, questionsData }) {
+    const db = this._getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('battles').insert({
+      code,
+      subject_id: subjectId,
+      subject_name: subjectName,
+      wager: wager || 0,
+      is_public: isPublic || false,
+      player1_id: player1Id,
+      player1_name: player1Name,
+      player1_avatar: player1Avatar || '🎓',
+      questions_data: questionsData,
+      status: 'waiting'
+    }).select().single();
+    if (error) { console.error('createBattle error:', error); return null; }
+    return data;
+  }
+
+  static async findMatchmakingBattle(subjectId, myUsername) {
+    const db = this._getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('battles')
+      .select('*')
+      .eq('status', 'waiting')
+      .eq('is_public', true)
+      .is('player2_id', null)
+      .neq('player1_id', myUsername)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) { console.error('findMatchmaking error:', error); return null; }
+    return data;
+  }
+
+  static async joinBattle(battleId, { player2Id, player2Name, player2Avatar }) {
+    const db = this._getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('battles')
+      .update({
+        player2_id: player2Id,
+        player2_name: player2Name,
+        player2_avatar: player2Avatar || '🎓',
+        status: 'waiting'
+      })
+      .eq('id', battleId)
+      .select()
+      .single();
+    if (error) { console.error('joinBattle error:', error); return null; }
+    return data;
+  }
+
+  static async getBattle(battleId) {
+    const db = this._getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('battles').select('*').eq('id', battleId).single();
+    if (error) return null;
+    return data;
+  }
+
+  static async getBattleByCode(code) {
+    const db = this._getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('battles').select('*').eq('code', code.toUpperCase()).eq('status', 'waiting').maybeSingle();
+    if (error) return null;
+    return data;
+  }
+
+  static async deleteBattle(battleId) {
+    const db = this._getDB();
+    if (!db) return;
+    await db.from('battles').delete().eq('id', battleId);
+  }
+
+  static async markReady(battleId, playerNum) {
+    const db = this._getDB();
+    if (!db) return null;
+    const field = playerNum === 1 ? 'player1_ready' : 'player2_ready';
+    const { data, error } = await db.from('battles')
+      .update({ [field]: true })
+      .eq('id', battleId)
+      .select()
+      .single();
+    if (error) return null;
+    return data;
+  }
+
+  static async updateScore(battleId, playerNum, score) {
+    const db = this._getDB();
+    if (!db) return;
+    const field = playerNum === 1 ? 'player1_score' : 'player2_score';
+    await db.from('battles').update({ [field]: score }).eq('id', battleId);
+  }
+
+  static async finishBattle(battleId) {
+    const db = this._getDB();
+    if (!db) return;
+    await db.from('battles').update({ status: 'finished' }).eq('id', battleId);
+  }
+
+  // --- Supabase Realtime Channel ---
+  static subscribeToBattle(battleId, callbacks) {
+    const db = this._getDB();
+    if (!db) return null;
+
+    const channel = db.channel(`battle_${battleId}`, {
+      config: { broadcast: { self: false } }
+    });
+
+    channel.on('broadcast', { event: 'player_joined' }, (payload) => {
+      if (callbacks.onPlayerJoined) callbacks.onPlayerJoined(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'player_ready' }, (payload) => {
+      if (callbacks.onPlayerReady) callbacks.onPlayerReady(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'battle_start' }, (payload) => {
+      if (callbacks.onBattleStart) callbacks.onBattleStart(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'score_update' }, (payload) => {
+      if (callbacks.onScoreUpdate) callbacks.onScoreUpdate(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'question_advance' }, (payload) => {
+      if (callbacks.onQuestionAdvance) callbacks.onQuestionAdvance(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'emote' }, (payload) => {
+      if (callbacks.onEmote) callbacks.onEmote(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'battle_finished' }, (payload) => {
+      if (callbacks.onBattleFinished) callbacks.onBattleFinished(payload.payload);
+    });
+
+    channel.subscribe();
+    return channel;
+  }
+
+  static broadcastEvent(channel, eventType, payload) {
+    if (!channel) return;
+    channel.send({ type: 'broadcast', event: eventType, payload });
+  }
+
+  // --- High-level Duel Actions ---
+
+  static async createPrivateRoom(subjectData, wager = 0) {
+    const profile = StorageManager.getProfile();
+    if (wager > 0 && profile.coins < wager) {
+      return { success: false, message: `Pièces insuffisantes ! (${profile.coins} 🪙 dispo, ${wager} 🪙 requis)` };
+    }
+
+    const code = this.generateRoomCode();
+    const questions = [...subjectData.questions].sort(() => Math.random() - 0.5).slice(0, 10);
+    const questionsClean = questions.map(q => ({
+      id: q.id || Math.random().toString(36).substring(2, 9),
+      question: q.question,
+      options: q.options || [],
+      correct: q.correct,
+      explanation: q.explanation || ''
+    }));
+
+    const battle = await this.createBattle({
+      code,
+      subjectId: subjectData.id,
+      subjectName: subjectData.name,
+      wager,
+      isPublic: false,
+      player1Id: profile.cloudAccount?.username || profile.name,
+      player1Name: profile.name,
+      player1Avatar: profile.avatar || '🎓',
+      questionsData: questionsClean
+    });
+
+    if (!battle) return { success: false, message: 'Erreur serveur. Réessayez.' };
+    return { success: true, battle, code };
+  }
+
+  static async joinPrivateRoom(code) {
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username || profile.name;
+
+    const battle = await this.getBattleByCode(code.toUpperCase());
+    if (!battle) return { success: false, message: 'Salon introuvable ou déjà commencé.' };
+    if (battle.player1_id === myUsername) return { success: false, message: 'Vous ne pouvez pas combattre contre vous-même ! 🚫' };
+    if (battle.player2_id) return { success: false, message: 'Ce salon est déjà plein !' };
+    if (battle.wager > 0 && profile.coins < battle.wager) {
+      return { success: false, message: `Pièces insuffisantes ! (${profile.coins} 🪙 dispo, ${battle.wager} 🪙 requis)` };
+    }
+
+    const updated = await this.joinBattle(battle.id, {
+      player2Id: myUsername,
+      player2Name: profile.name,
+      player2Avatar: profile.avatar || '🎓'
+    });
+
+    if (!updated) return { success: false, message: 'Erreur en rejoignant le salon.' };
+    return { success: true, battle: updated };
+  }
+
+  static async startMatchmaking(subjectData) {
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username || profile.name;
+
+    // Search for an existing public room
+    const existing = await this.findMatchmakingBattle(subjectData.id, myUsername);
+
+    if (existing) {
+      // Join the existing room
+      if (existing.wager > 0 && profile.coins < existing.wager) {
+        return { success: false, message: `Pièces insuffisantes pour ce pari ! (${existing.wager} 🪙 requis)` };
+      }
+
+      const updated = await this.joinBattle(existing.id, {
+        player2Id: myUsername,
+        player2Name: profile.name,
+        player2Avatar: profile.avatar || '🎓'
+      });
+
+      if (!updated) return { success: false, message: 'Erreur matchmaking.' };
+      return { success: true, matched: true, battle: updated };
+    }
+
+    // No room found — create one and wait
+    const code = this.generateRoomCode();
+    const questions = [...subjectData.questions].sort(() => Math.random() - 0.5).slice(0, 10);
+    const questionsClean = questions.map(q => ({
+      id: q.id || Math.random().toString(36).substring(2, 9),
+      question: q.question,
+      options: q.options || [],
+      correct: q.correct,
+      explanation: q.explanation || ''
+    }));
+
+    const battle = await this.createBattle({
+      code,
+      subjectId: subjectData.id,
+      subjectName: subjectData.name,
+      wager: 0,
+      isPublic: true,
+      player1Id: myUsername,
+      player1Name: profile.name,
+      player1Avatar: profile.avatar || '🎓',
+      questionsData: questionsClean
+    });
+
+    if (!battle) return { success: false, message: 'Erreur serveur.' };
+    return { success: true, matched: false, waiting: true, battle };
+  }
+
+  static async cancelMatchmaking(battleId) {
+    await this.deleteBattle(battleId);
+  }
+
+  static resolveDuel(wager, myScore, oppScore) {
+    const profile = StorageManager.getProfile();
+    profile.stats = profile.stats || {};
+    profile.stats.duelPlayed = (profile.stats.duelPlayed || 0) + 1;
+
+    let result, coinsEarned = 0;
+
+    if (myScore > oppScore) {
+      result = 'VICTORY';
+      profile.stats.duelWins = (profile.stats.duelWins || 0) + 1;
+      coinsEarned = wager * 2;
+      if (wager > 0) {
+        profile.totalCoinsEarned = (profile.totalCoinsEarned ?? profile.coins ?? 50) + coinsEarned;
+        profile.coins = Math.max(0, (profile.totalCoinsEarned ?? 50) - (profile.totalCoinsSpent ?? 0));
+      }
+      profile.xp += 100;
+    } else if (myScore === oppScore) {
+      result = 'DRAW';
+      // Refund wager
+      if (wager > 0) {
+        profile.totalCoinsEarned = (profile.totalCoinsEarned ?? profile.coins ?? 50) + wager;
+        profile.coins = Math.max(0, (profile.totalCoinsEarned ?? 50) - (profile.totalCoinsSpent ?? 0));
+      }
+      profile.xp += 25;
+    } else {
+      result = 'DEFEAT';
+      profile.stats.duelLosses = (profile.stats.duelLosses || 0) + 1;
+      // Wager already deducted, no refund
+      profile.xp += 10;
+    }
+
+    StorageManager.saveProfile(profile);
+    return { result, coinsEarned, wager, myScore, oppScore };
+  }
+
+  // --- Leaderboard (unchanged) ---
   static async getLeaderboard() {
     const profile = StorageManager.getProfile();
     const isVerified = StorageManager.verifyAntiCheatToken(profile);
@@ -11235,10 +11564,8 @@ class MultiplayerEngine {
       isVerified
     };
 
-    // Fetch from Supabase Cloud
     let cloudPlayers = await fetchCloudLeaderboard();
 
-    // Fall back to localStorage if cloud unavailable
     if (!cloudPlayers || cloudPlayers.length === 0) {
       cloudPlayers = StorageManager.getGlobalLeaderboardRegistry().map(p => ({
         name: p.name, level: p.level, xp: p.xp || 0, coins: p.coins, wins: p.wins,
@@ -11251,7 +11578,7 @@ class MultiplayerEngine {
     cloudPlayers.forEach(player => {
       const profileLike = { ...player, checksumToken: player.checksum_token, stats: { duelWins: player.wins } };
       const isValid = StorageManager.verifyAntiCheatToken(profileLike);
-      if (!isValid) return; // Strict: skip cheated accounts
+      if (!isValid) return;
 
       const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
       mapPlayers.set(player.name.toLowerCase(), {
@@ -11266,7 +11593,6 @@ class MultiplayerEngine {
       });
     });
 
-    // Always include local user
     if (isVerified) {
       mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
     }
@@ -11275,114 +11601,6 @@ class MultiplayerEngine {
       if (b.level !== a.level) return b.level - a.level;
       return b.coins - a.coins;
     });
-  }
-
-  initHostPeer(roomCode, roomData, onPlayerJoinedCallback, onDataReceivedCallback) {
-    const peerId = `remix_${roomCode.replace('-', '_').toLowerCase()}`;
-    if (window.Peer) {
-      try {
-        this.peer = new window.Peer(peerId);
-        this.peer.on('open', id => console.log('PeerJS Host Ready:', id));
-        this.peer.on('connection', connection => {
-          this.conn = connection;
-          this.conn.on('open', () => {
-            this.conn.send({ type: 'ROOM_SETUP', room: roomData });
-            if (onPlayerJoinedCallback) onPlayerJoinedCallback(this.conn);
-          });
-          this.conn.on('data', data => { if (onDataReceivedCallback) onDataReceivedCallback(data); });
-        });
-        this.peer.on('error', err => console.log('PeerJS Host Error:', err));
-      } catch (e) {}
-    }
-  }
-
-  initGuestPeer(roomCode, onConnectedCallback, onDataReceivedCallback) {
-    const hostPeerId = `remix_${roomCode.replace('-', '_').toLowerCase()}`;
-    if (window.Peer) {
-      try {
-        this.peer = new window.Peer();
-        this.peer.on('open', () => {
-          this.conn = this.peer.connect(hostPeerId);
-          this.conn.on('open', () => {
-            const profile = StorageManager.getProfile();
-            this.conn.send({ type: 'GUEST_JOINED', guest: { name: profile.name, avatar: profile.avatar } });
-            if (onConnectedCallback) onConnectedCallback(this.conn);
-          });
-          this.conn.on('data', data => { if (onDataReceivedCallback) onDataReceivedCallback(data); });
-        });
-        this.peer.on('error', err => console.log('PeerJS Guest Error:', err));
-      } catch (e) {}
-    }
-  }
-
-  sendWebRTCData(payload) {
-    if (this.conn && this.conn.open) this.conn.send(payload);
-  }
-
-  static createRoom({ subject, wager, questionCount = 5 }) {
-    const profile = StorageManager.getProfile();
-    if (profile.coins < wager) return { success: false, message: `Pièces insuffisantes (${profile.coins} 🪙 disponibles, ${wager} 🪙 requis) !` };
-    const roomCode = this.generateRoomCode();
-    const questions = [...subject.questions].sort(() => Math.random() - 0.5).slice(0, questionCount);
-    const room = {
-      code: roomCode, subjectId: subject.id, subjectName: subject.name, wager,
-      host: { name: profile.name, avatar: profile.avatar, score: 0, currentIdx: 0, finished: false },
-      guest: null, questions, status: 'WAITING_FOR_PLAYER', createdTime: Date.now()
-    };
-    profile.coins -= wager;
-    StorageManager.saveProfile(profile);
-    localStorage.setItem(`remix_room_${roomCode}`, JSON.stringify(room));
-    return { success: true, roomCode, room };
-  }
-
-  static joinRoom({ roomCode }) {
-    const profile = StorageManager.getProfile();
-    const formattedCode = roomCode.toUpperCase().trim();
-    const roomData = localStorage.getItem(`remix_room_${formattedCode}`);
-    if (!roomData) {
-      const subjects = StorageManager.getSubjects();
-      const sub = Object.values(subjects)[0];
-      if (profile.coins < 100) return { success: false, message: 'Pièces insuffisantes (100 🪙 requis) !' };
-      profile.coins -= 100;
-      StorageManager.saveProfile(profile);
-      return { success: true, room: {
-        code: formattedCode, subjectId: sub.id, subjectName: sub.name, wager: 100,
-        host: { name: 'Adversaire_En_Ligne', avatar: '⚔️', score: 0, currentIdx: 0, finished: false },
-        guest: { name: profile.name, avatar: profile.avatar, score: 0, currentIdx: 0, finished: false },
-        questions: [...sub.questions].sort(() => Math.random() - 0.5).slice(0, 5),
-        status: 'PLAYING', createdTime: Date.now()
-      }};
-    }
-    const room = JSON.parse(roomData);
-    if (profile.coins < room.wager) return { success: false, message: `Pièces insuffisantes ! Il vous faut ${room.wager} 🪙.` };
-    profile.coins -= room.wager;
-    StorageManager.saveProfile(profile);
-    room.guest = { name: profile.name, avatar: profile.avatar, score: 0, currentIdx: 0, finished: false };
-    room.status = 'PLAYING';
-    localStorage.setItem(`remix_room_${formattedCode}`, JSON.stringify(room));
-    return { success: true, room };
-  }
-
-  static resolveDuel(room, userScore, botScore) {
-    const profile = StorageManager.getProfile();
-    profile.stats = profile.stats || {};
-    profile.stats.duelPlayed = (profile.stats.duelPlayed || 0) + 1;
-    const pot = room.wager * 2;
-    let result = '';
-    if (userScore > botScore) {
-      profile.coins += pot;
-      profile.stats.duelWins = (profile.stats.duelWins || 0) + 1;
-      profile.xp += 150;
-      result = 'VICTORY';
-    } else if (userScore === botScore) {
-      profile.coins += room.wager;
-      result = 'DRAW';
-    } else {
-      profile.stats.duelLosses = (profile.stats.duelLosses || 0) + 1;
-      result = 'DEFEAT';
-    }
-    StorageManager.saveProfile(profile);
-    return { result, pot, wager: room.wager, coinsEarned: result === 'VICTORY' ? pot : (result === 'DRAW' ? room.wager : 0), userScore, botScore };
   }
 }
 
@@ -11406,6 +11624,9 @@ class AppController {
     this.profileClickCount = 0;
     this.profileClickTimer = null;
     this.currentDuelRoom = null;
+    // Duel state
+    this.duelState = null; // { battleId, channel, playerNum, battle, myScore, oppScore, questionIndex, questions }
+    this.matchmakingPollInterval = null;
   }
 
   init() {
@@ -11976,6 +12197,12 @@ class AppController {
   }
 
   handleAnswerSelection(selectedCard, selectedOption) {
+    // If in duel mode, use duel-specific handler
+    if (this.duelState) {
+      this.handleDuelAnswer(selectedCard, selectedOption);
+      return;
+    }
+
     // Lock all options immediately so no second click or 2nd attempt is possible
     const allCards = document.querySelectorAll('.option-card');
     allCards.forEach(c => {
@@ -12077,6 +12304,440 @@ class AppController {
     }
   }
 
+  // === DUEL METHODS ===
+
+  showDuelScreen(screen) {
+    const screens = ['duel-menu-screen', 'duel-matchmaking-screen', 'duel-lobby-screen', 'duel-results-screen'];
+    screens.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    const leaderboard = document.getElementById('duel-leaderboard-section');
+
+    switch (screen) {
+      case 'menu':
+        document.getElementById('duel-menu-screen').style.display = 'block';
+        if (leaderboard) leaderboard.style.display = 'block';
+        break;
+      case 'matchmaking':
+        document.getElementById('duel-matchmaking-screen').style.display = 'block';
+        if (leaderboard) leaderboard.style.display = 'none';
+        break;
+      case 'lobby':
+        document.getElementById('duel-lobby-screen').style.display = 'block';
+        if (leaderboard) leaderboard.style.display = 'none';
+        break;
+      case 'results':
+        document.getElementById('duel-results-screen').style.display = 'block';
+        if (leaderboard) leaderboard.style.display = 'none';
+        break;
+    }
+  }
+
+  enterDuelLobby(battle, existingChannel = null) {
+    if (this.matchmakingPollInterval) {
+      clearInterval(this.matchmakingPollInterval);
+      this.matchmakingPollInterval = null;
+    }
+
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username || profile.name;
+    const playerNum = battle.player1_id === myUsername ? 1 : 2;
+
+    // Deduct wager now for joining player
+    if (battle.wager > 0) {
+      profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + battle.wager;
+      profile.coins = Math.max(0, (profile.totalCoinsEarned ?? profile.coins ?? 50) - profile.totalCoinsSpent);
+      StorageManager.saveProfile(profile);
+      this.updateHeaderStats();
+    }
+
+    // Setup or reuse channel
+    const channel = existingChannel || (this.duelState?.channel) || MultiplayerEngine.subscribeToBattle(battle.id, {});
+
+    // Remove old listeners and re-subscribe with full callbacks
+    if (channel) {
+      channel.unsubscribe();
+    }
+
+    const fullChannel = MultiplayerEngine.subscribeToBattle(battle.id, {
+      onPlayerReady: async (data) => {
+        const readyEl = data.playerNum === 1 ? document.getElementById('lobby-p1-ready') : document.getElementById('lobby-p2-ready');
+        if (readyEl) { readyEl.textContent = '✅ Prêt !'; readyEl.style.color = 'var(--accent-green)'; }
+
+        // Check if both ready
+        const b = await MultiplayerEngine.getBattle(battle.id);
+        if (b && b.player1_ready && b.player2_ready) {
+          this.startDuelCountdown();
+        }
+      },
+      onScoreUpdate: (data) => {
+        if (!this.duelState) return;
+        const oppField = this.duelState.playerNum === 1 ? 'p2Score' : 'p1Score';
+        this.duelState.oppScore = data[oppField] || data.score || 0;
+        const oppScoreEl = document.getElementById('duel-hud-p2-score');
+        if (oppScoreEl) oppScoreEl.textContent = this.duelState.oppScore;
+      },
+      onEmote: (data) => {
+        this.displayReceivedEmote(data.emoji);
+      },
+      onBattleFinished: (data) => {
+        this.endDuel();
+      }
+    });
+
+    this.duelState = {
+      battleId: battle.id,
+      channel: fullChannel,
+      playerNum,
+      battle,
+      myScore: 0,
+      oppScore: 0,
+      questionIndex: 0,
+      questions: battle.questions_data || []
+    };
+
+    // Update lobby UI
+    this.showDuelScreen('lobby');
+    document.getElementById('lobby-p1-avatar').textContent = battle.player1_avatar || '🎓';
+    document.getElementById('lobby-p1-name').textContent = battle.player1_name;
+    document.getElementById('lobby-p2-avatar').textContent = battle.player2_avatar || '⚔️';
+    document.getElementById('lobby-p2-name').textContent = battle.player2_name || 'Adversaire';
+    document.getElementById('lobby-room-code').textContent = battle.code;
+    document.getElementById('lobby-subject-name').textContent = battle.subject_name;
+
+    if (battle.wager > 0) {
+      document.getElementById('lobby-pot-badge').textContent = `Pot : ${battle.wager * 2} 🪙`;
+    } else {
+      document.getElementById('lobby-pot-badge').textContent = 'Mode Amical';
+    }
+
+    // Reset ready states
+    document.getElementById('lobby-p1-ready').textContent = '⏳ En attente...';
+    document.getElementById('lobby-p1-ready').style.color = 'var(--text-secondary)';
+    document.getElementById('lobby-p2-ready').textContent = '⏳ En attente...';
+    document.getElementById('lobby-p2-ready').style.color = 'var(--text-secondary)';
+
+    const readyBtn = document.getElementById('btn-duel-ready');
+    if (readyBtn) { readyBtn.disabled = false; readyBtn.textContent = '✅ Je suis Prêt !'; }
+  }
+
+  startDuelCountdown() {
+    const overlay = document.getElementById('duel-countdown-overlay');
+    const numEl = document.getElementById('countdown-number');
+    if (!overlay || !numEl) { this.startDuelBattle(); return; }
+
+    overlay.style.display = 'flex';
+    let count = 3;
+    numEl.textContent = count;
+    numEl.style.animation = 'countdownPulse 0.8s ease-out';
+
+    const countInterval = setInterval(() => {
+      count--;
+      if (count > 0) {
+        numEl.textContent = count;
+        numEl.style.animation = 'none';
+        void numEl.offsetWidth; // trigger reflow
+        numEl.style.animation = 'countdownPulse 0.8s ease-out';
+      } else if (count === 0) {
+        numEl.textContent = 'GO !';
+        numEl.style.color = 'var(--accent-green)';
+        numEl.style.animation = 'none';
+        void numEl.offsetWidth;
+        numEl.style.animation = 'countdownPulse 0.8s ease-out';
+      } else {
+        clearInterval(countInterval);
+        overlay.style.display = 'none';
+        numEl.style.color = 'white';
+        this.startDuelBattle();
+      }
+    }, 1000);
+  }
+
+  startDuelBattle() {
+    if (!this.duelState || !this.duelState.questions.length) return;
+
+    const battle = this.duelState.battle;
+    const profile = StorageManager.getProfile();
+
+    // Start a quiz session with duel mode
+    this.quizEngine.startSession({
+      subjectId: battle.subject_id,
+      questions: this.duelState.questions,
+      mode: 'duel',
+      sessionTimerSeconds: 180
+    });
+
+    // Switch to quiz view
+    document.getElementById('quiz-subject-badge').textContent = `⚔️ DUEL (${battle.code})`;
+    this.switchView('quiz-view');
+
+    // Hide normal quiz controls, inject duel HUD
+    const saveBtn = document.getElementById('quiz-save-exit-btn');
+    if (saveBtn) saveBtn.style.display = 'none';
+    const nextBtn = document.getElementById('quiz-next-btn');
+    if (nextBtn) nextBtn.style.display = 'none';
+
+    // Inject duel HUD before quiz container
+    const quizContainer = document.getElementById('quiz-question-container');
+    if (quizContainer) {
+      const hudTemplate = document.getElementById('duel-hud-template');
+      if (hudTemplate) {
+        const hud = hudTemplate.content.cloneNode(true);
+        quizContainer.parentElement.insertBefore(hud, quizContainer);
+      }
+    }
+
+    // Set HUD player info
+    const myName = this.duelState.playerNum === 1 ? battle.player1_name : battle.player2_name;
+    const myAvatar = this.duelState.playerNum === 1 ? battle.player1_avatar : battle.player2_avatar;
+    const oppName = this.duelState.playerNum === 1 ? battle.player2_name : battle.player1_name;
+    const oppAvatar = this.duelState.playerNum === 1 ? battle.player2_avatar : battle.player1_avatar;
+
+    const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+    setEl('duel-hud-p1-avatar', myAvatar || '🎓');
+    setEl('duel-hud-p1-name', myName);
+    setEl('duel-hud-p1-score', '0');
+    setEl('duel-hud-p2-avatar', oppAvatar || '⚔️');
+    setEl('duel-hud-p2-name', oppName);
+    setEl('duel-hud-p2-score', '0');
+
+    // Populate emoji bar
+    const emojiBar = document.getElementById('duel-emoji-bar');
+    if (emojiBar) {
+      emojiBar.innerHTML = '';
+      DUEL_EMOJIS.forEach(em => {
+        const btn = document.createElement('button');
+        btn.className = 'duel-emoji-btn';
+        btn.textContent = em.emoji;
+        btn.title = em.label;
+        btn.addEventListener('click', () => {
+          if (this.duelState?.channel) {
+            MultiplayerEngine.broadcastEvent(this.duelState.channel, 'emote', { emoji: em.emoji, label: em.label });
+            // Show own emote briefly
+            this.displayReceivedEmote(em.emoji, true);
+          }
+        });
+        emojiBar.appendChild(btn);
+      });
+    }
+
+    // Render first question
+    this.duelState.questionIndex = 0;
+    this.duelState.myScore = 0;
+    this.duelState.oppScore = 0;
+    this.renderCurrentQuestion(this.quizEngine.getCurrentQuestion());
+
+    // Start duel timer (does NOT pause on answer)
+    this.startTimer();
+  }
+
+  handleDuelAnswer(selectedCard, selectedOption) {
+    if (!this.duelState) return;
+
+    // Lock all options
+    const allCards = document.querySelectorAll('.option-card');
+    allCards.forEach(c => { c.classList.add('answered'); c.style.pointerEvents = 'none'; });
+
+    // DO NOT pause the timer in duel mode
+    const result = this.quizEngine.submitAnswer(selectedOption);
+    const targetCard = (selectedCard && selectedCard.closest) ? selectedCard.closest('.option-card') : selectedCard;
+
+    // Visual feedback (correct/wrong) — quick, no explanation
+    if (result.wasCorrect) {
+      if (targetCard) {
+        targetCard.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
+        targetCard.style.setProperty('border', '3px solid #10b981', 'important');
+      }
+      SoundFX.playCorrect();
+    } else {
+      if (targetCard) {
+        targetCard.style.setProperty('background-color', 'rgba(239, 68, 68, 0.5)', 'important');
+        targetCard.style.setProperty('border', '3px solid #ef4444', 'important');
+      }
+      SoundFX.playWrong();
+
+      // Show correct answer
+      allCards.forEach(c => {
+        if (c.getAttribute('data-option') === result.correctAnswer) {
+          c.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
+          c.style.setProperty('border', '3px solid #10b981', 'important');
+        }
+      });
+    }
+
+    // Update duel score
+    this.duelState.myScore = this.quizEngine.currentSession?.score || 0;
+
+    // Update HUD
+    const myScoreEl = document.getElementById('duel-hud-p1-score');
+    if (myScoreEl) myScoreEl.textContent = this.duelState.myScore;
+
+    // Broadcast score to opponent
+    const scoreField = this.duelState.playerNum === 1 ? 'p1Score' : 'p2Score';
+    MultiplayerEngine.broadcastEvent(this.duelState.channel, 'score_update', {
+      [scoreField]: this.duelState.myScore,
+      score: this.duelState.myScore
+    });
+
+    // Update DB score
+    MultiplayerEngine.updateScore(this.duelState.battleId, this.duelState.playerNum, this.duelState.myScore);
+
+    // Auto-advance after 2 seconds
+    this.duelState.questionIndex++;
+    setTimeout(() => {
+      if (!this.duelState) return;
+
+      if (result.isFinished || this.duelState.questionIndex >= this.duelState.questions.length) {
+        this.endDuel();
+      } else {
+        const nextQ = this.quizEngine.getCurrentQuestion();
+        if (nextQ) {
+          this.renderCurrentQuestion(nextQ);
+        } else {
+          this.endDuel();
+        }
+      }
+    }, 2000);
+  }
+
+  async endDuel() {
+    if (!this.duelState) return;
+    clearInterval(this.timerInterval);
+
+    // Finish the quiz session
+    if (this.quizEngine.currentSession) {
+      this.quizEngine.finishSession();
+    }
+
+    // Mark battle as finished
+    await MultiplayerEngine.finishBattle(this.duelState.battleId);
+
+    // Broadcast finished
+    MultiplayerEngine.broadcastEvent(this.duelState.channel, 'battle_finished', {
+      player1_score: this.duelState.playerNum === 1 ? this.duelState.myScore : this.duelState.oppScore,
+      player2_score: this.duelState.playerNum === 2 ? this.duelState.myScore : this.duelState.oppScore
+    });
+
+    // Resolve duel (coins, stats)
+    const duelResult = MultiplayerEngine.resolveDuel(
+      this.duelState.battle.wager || 0,
+      this.duelState.myScore,
+      this.duelState.oppScore
+    );
+
+    // Remove HUD elements
+    const hud = document.getElementById('duel-hud');
+    if (hud) hud.remove();
+    const emojiBar = document.getElementById('duel-emoji-bar');
+    if (emojiBar) emojiBar.remove();
+    const emotesReceived = document.getElementById('duel-emotes-received');
+    if (emotesReceived) emotesReceived.remove();
+
+    // Show results
+    this.showDuelResults(duelResult);
+  }
+
+  showDuelResults(duelResult) {
+    this.switchView('duels-view');
+    this.showDuelScreen('results');
+    this.updateHeaderStats();
+
+    const battle = this.duelState?.battle;
+    const playerNum = this.duelState?.playerNum || 1;
+
+    // Set result emoji and title
+    const resultEmoji = document.getElementById('duel-result-emoji');
+    const resultTitle = document.getElementById('duel-result-title');
+
+    if (duelResult.result === 'VICTORY') {
+      if (resultEmoji) resultEmoji.textContent = '🏆';
+      if (resultTitle) { resultTitle.textContent = 'VICTOIRE !'; resultTitle.style.color = 'var(--accent-green)'; }
+    } else if (duelResult.result === 'DEFEAT') {
+      if (resultEmoji) resultEmoji.textContent = '💀';
+      if (resultTitle) { resultTitle.textContent = 'DÉFAITE...'; resultTitle.style.color = 'var(--accent-red)'; }
+    } else {
+      if (resultEmoji) resultEmoji.textContent = '🤝';
+      if (resultTitle) { resultTitle.textContent = 'ÉGALITÉ !'; resultTitle.style.color = 'var(--accent-amber)'; }
+    }
+
+    // Set scores
+    const myName = battle ? (playerNum === 1 ? battle.player1_name : battle.player2_name) : 'Vous';
+    const myAvatar = battle ? (playerNum === 1 ? battle.player1_avatar : battle.player2_avatar) : '🎓';
+    const oppName = battle ? (playerNum === 1 ? battle.player2_name : battle.player1_name) : 'Adversaire';
+    const oppAvatar = battle ? (playerNum === 1 ? battle.player2_avatar : battle.player1_avatar) : '⚔️';
+
+    document.getElementById('duel-res-p1-avatar').textContent = myAvatar || '🎓';
+    document.getElementById('duel-res-p1-name').textContent = myName;
+    document.getElementById('duel-res-p1-score').textContent = duelResult.myScore;
+    document.getElementById('duel-res-p2-avatar').textContent = oppAvatar || '⚔️';
+    document.getElementById('duel-res-p2-name').textContent = oppName;
+    document.getElementById('duel-res-p2-score').textContent = duelResult.oppScore;
+
+    // Coins banner
+    const coinsBanner = document.getElementById('duel-res-coins-banner');
+    if (coinsBanner) {
+      if (duelResult.result === 'VICTORY' && duelResult.wager > 0) {
+        coinsBanner.textContent = `+${duelResult.coinsEarned} 🪙 (Pot gagné !)`;
+        coinsBanner.style.borderColor = 'var(--accent-green)';
+        coinsBanner.style.background = 'rgba(16, 185, 129, 0.15)';
+        coinsBanner.style.color = '#6ee7b7';
+      } else if (duelResult.result === 'DEFEAT' && duelResult.wager > 0) {
+        coinsBanner.textContent = `-${duelResult.wager} 🪙 (Pari perdu)`;
+        coinsBanner.style.borderColor = 'var(--accent-red)';
+        coinsBanner.style.background = 'rgba(239, 68, 68, 0.15)';
+        coinsBanner.style.color = '#fca5a5';
+      } else if (duelResult.result === 'DRAW' && duelResult.wager > 0) {
+        coinsBanner.textContent = `+${duelResult.wager} 🪙 (Remboursé)`;
+        coinsBanner.style.borderColor = 'var(--accent-amber)';
+        coinsBanner.style.background = 'rgba(245, 158, 11, 0.15)';
+        coinsBanner.style.color = '#fbbf24';
+      } else {
+        coinsBanner.textContent = 'Match Amical — pas de pari';
+        coinsBanner.style.borderColor = 'var(--border-color)';
+        coinsBanner.style.background = 'rgba(255,255,255,0.03)';
+        coinsBanner.style.color = 'var(--text-secondary)';
+      }
+    }
+  }
+
+  displayReceivedEmote(emoji, isSelf = false) {
+    const container = document.getElementById('duel-emotes-received');
+    if (!container) return;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'emote-bubble';
+    bubble.textContent = emoji;
+    if (isSelf) bubble.style.opacity = '0.5';
+    container.appendChild(bubble);
+
+    // Fade out after 2.5s, remove after 3s
+    setTimeout(() => bubble.classList.add('fade-out'), 2500);
+    setTimeout(() => bubble.remove(), 3000);
+  }
+
+  cleanupDuel() {
+    if (this.matchmakingPollInterval) {
+      clearInterval(this.matchmakingPollInterval);
+      this.matchmakingPollInterval = null;
+    }
+    if (this.duelState?.channel) {
+      this.duelState.channel.unsubscribe();
+    }
+    clearInterval(this.timerInterval);
+
+    // Remove HUD elements if they exist
+    const hud = document.getElementById('duel-hud');
+    if (hud) hud.remove();
+    const emojiBar = document.getElementById('duel-emoji-bar');
+    if (emojiBar) emojiBar.remove();
+    const emotesReceived = document.getElementById('duel-emotes-received');
+    if (emotesReceived) emotesReceived.remove();
+
+    this.duelState = null;
+    this.updateHeaderStats();
+  }
+
   startFlashcardMode(subjectId = null) {
     const subjects = StorageManager.getSubjects();
     let sub = null;
@@ -12165,7 +12826,11 @@ class AppController {
 
         if (session.sessionTimer <= 0) {
           clearInterval(this.timerInterval);
-          this.showResults(this.quizEngine.finishSession());
+          if (this.duelState) {
+            this.endDuel();
+          } else {
+            this.showResults(this.quizEngine.finishSession());
+          }
         }
       }
     }, 1000);
@@ -12472,98 +13137,185 @@ class AppController {
       });
     }
 
-    // Create Duel Room
-    const btnCreateDuel = document.getElementById('btn-create-duel');
-    if (btnCreateDuel) {
-      btnCreateDuel.addEventListener('click', () => {
-        const subjectId = document.getElementById('duel-subject-select').value;
-        const wager = parseInt(document.getElementById('duel-wager-select').value, 10);
-        const subjects = StorageManager.getSubjects();
-        const sub = subjects[subjectId];
+    // === DUEL SYSTEM EVENT LISTENERS ===
 
-        const res = MultiplayerEngine.createRoom({ subject: sub, wager: wager });
-        if (res.success) {
-          this.currentDuelRoom = res.room;
-
-          const arenaBox = document.getElementById('duel-arena-box');
-          arenaBox.style.display = 'block';
-
-          document.getElementById('arena-user-avatar').textContent = res.room.host.avatar;
-          document.getElementById('arena-user-name').textContent = res.room.host.name;
-          document.getElementById('arena-user-score').textContent = '0 Pts';
-
-          document.getElementById('arena-opp-avatar').textContent = '⚔️';
-          document.getElementById('arena-opp-name').textContent = 'Adversaire (Code: ' + res.roomCode + ')';
-          document.getElementById('arena-opp-score').textContent = '0 Pts';
-
-          document.getElementById('arena-pot-badge').textContent = `Pot Total : ${wager * 2} 🪙`;
-          document.getElementById('arena-room-code').textContent = `CODE DUEL : ${res.roomCode}`;
-
-          alert(`🥊 Salon de Duel créé ! Donnez le Code "${res.roomCode}" à votre adversaire pour qu'il rejoigne le pari !`);
-          this.updateHeaderStats();
+    // Wager toggle
+    const wagerToggle = document.getElementById('duel-wager-toggle');
+    if (wagerToggle) {
+      wagerToggle.addEventListener('change', () => {
+        const opts = document.getElementById('duel-wager-options');
+        const label = document.getElementById('duel-wager-disabled-label');
+        if (wagerToggle.checked) {
+          if (opts) opts.style.display = 'block';
+          if (label) label.style.display = 'none';
         } else {
-          alert(res.message);
+          if (opts) opts.style.display = 'none';
+          if (label) label.style.display = 'block';
         }
       });
     }
 
-    // Join Duel Room
-    const btnJoinDuel = document.getElementById('btn-join-duel');
-    if (btnJoinDuel) {
-      btnJoinDuel.addEventListener('click', () => {
-        const codeInput = document.getElementById('input-duel-code').value.trim();
-        if (!codeInput) {
-          alert('Veuillez entrer un code de salon DUEL-XXXX !');
-          return;
-        }
+    // Show join code input
+    safeOn('btn-join-duel-show', 'click', () => {
+      const box = document.getElementById('duel-join-box');
+      if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    });
 
-        const res = MultiplayerEngine.joinRoom({ roomCode: codeInput });
-        if (res.success) {
-          this.currentDuelRoom = res.room;
+    // Matchmaking Auto
+    safeOn('btn-matchmaking', 'click', async () => {
+      const profile = StorageManager.getProfile();
+      if (!profile.cloudAccount?.username) {
+        const warn = document.getElementById('duel-cloud-warning');
+        if (warn) warn.style.display = 'block';
+        return;
+      }
+      const subjectId = document.getElementById('duel-subject-select').value;
+      const subjects = StorageManager.getSubjects();
+      const sub = subjects[subjectId];
+      if (!sub || !sub.questions || sub.questions.length < 4) {
+        alert('Cette matière n\'a pas assez de questions pour un duel (minimum 4).');
+        return;
+      }
 
-          const arenaBox = document.getElementById('duel-arena-box');
-          arenaBox.style.display = 'block';
+      // Show matchmaking screen
+      this.showDuelScreen('matchmaking');
+      document.getElementById('matchmaking-status-text').textContent = `Recherche sur : ${sub.name}`;
 
-          document.getElementById('arena-user-avatar').textContent = res.room.guest ? res.room.guest.avatar : '🎓';
-          document.getElementById('arena-user-name').textContent = res.room.guest ? res.room.guest.name : 'Vous';
-          document.getElementById('arena-user-score').textContent = '0 Pts';
+      const res = await MultiplayerEngine.startMatchmaking(sub);
+      if (!res.success) {
+        alert(res.message);
+        this.showDuelScreen('menu');
+        return;
+      }
 
-          document.getElementById('arena-opp-avatar').textContent = res.room.host ? res.room.host.avatar : '⚔️';
-          document.getElementById('arena-opp-name').textContent = res.room.host ? res.room.host.name : 'Host';
-          document.getElementById('arena-opp-score').textContent = '0 Pts';
+      if (res.matched) {
+        // Directly matched! Go to lobby
+        this.enterDuelLobby(res.battle);
+      } else {
+        // Waiting for opponent — poll every 2s
+        this.matchmakingPollInterval = setInterval(async () => {
+          const battle = await MultiplayerEngine.getBattle(res.battle.id);
+          if (battle && battle.player2_id) {
+            clearInterval(this.matchmakingPollInterval);
+            this.matchmakingPollInterval = null;
+            this.enterDuelLobby(battle);
+          }
+        }, 2000);
+      }
+    });
 
-          document.getElementById('arena-pot-badge').textContent = `Pot Total : ${res.room.wager * 2} 🪙`;
-          document.getElementById('arena-room-code').textContent = `CODE DUEL : ${res.room.code}`;
+    // Cancel matchmaking
+    safeOn('btn-cancel-matchmaking', 'click', async () => {
+      if (this.matchmakingPollInterval) {
+        clearInterval(this.matchmakingPollInterval);
+        this.matchmakingPollInterval = null;
+      }
+      if (this.duelState?.battleId) {
+        await MultiplayerEngine.cancelMatchmaking(this.duelState.battleId);
+      }
+      this.duelState = null;
+      this.showDuelScreen('menu');
+    });
 
-          alert(`⚔️ Vous avez rejoint le duel ${res.room.code} ! Pari engagé : ${res.room.wager} 🪙.`);
-          this.updateHeaderStats();
-        } else {
-          alert(res.message);
+    // Create Private Room
+    safeOn('btn-create-duel', 'click', async () => {
+      const profile = StorageManager.getProfile();
+      if (!profile.cloudAccount?.username) {
+        const warn = document.getElementById('duel-cloud-warning');
+        if (warn) warn.style.display = 'block';
+        return;
+      }
+      const subjectId = document.getElementById('duel-subject-select').value;
+      const subjects = StorageManager.getSubjects();
+      const sub = subjects[subjectId];
+      if (!sub || !sub.questions || sub.questions.length < 4) {
+        alert('Pas assez de questions (minimum 4).');
+        return;
+      }
+
+      const wagerToggle = document.getElementById('duel-wager-toggle');
+      const wager = wagerToggle?.checked ? parseInt(document.getElementById('duel-wager-select').value, 10) : 0;
+
+      const res = await MultiplayerEngine.createPrivateRoom(sub, wager);
+      if (!res.success) { alert(res.message); return; }
+
+      alert(`🔒 Salon Privé créé !\n\nCode : ${res.code}\n\nDonnez ce code à votre adversaire !`);
+
+      // Subscribe and wait for player 2
+      this.showDuelScreen('matchmaking');
+      document.getElementById('matchmaking-status-text').textContent = `En attente d'un adversaire... Code : ${res.code}`;
+
+      const channel = MultiplayerEngine.subscribeToBattle(res.battle.id, {
+        onPlayerJoined: (data) => {
+          this.enterDuelLobby({ ...res.battle, ...data });
         }
       });
-    }
 
-    // Start Arena Duel Match
-    const btnArenaStart = document.getElementById('btn-arena-start-match');
-    if (btnArenaStart) {
-      btnArenaStart.addEventListener('click', () => {
-        if (!this.currentDuelRoom) return;
-        const room = this.currentDuelRoom;
+      this.duelState = { battleId: res.battle.id, channel, battle: res.battle };
 
-        this.quizEngine.startSession({
-          subjectId: room.subjectId,
-          questions: room.questions,
-          mode: 'classic',
-          timerSeconds: 15,
-          questionCount: room.questions.length
-        });
+      // Also poll in case broadcast is missed
+      this.matchmakingPollInterval = setInterval(async () => {
+        const battle = await MultiplayerEngine.getBattle(res.battle.id);
+        if (battle && battle.player2_id) {
+          clearInterval(this.matchmakingPollInterval);
+          this.matchmakingPollInterval = null;
+          this.enterDuelLobby(battle);
+        }
+      }, 2000);
+    });
 
-        document.getElementById('quiz-subject-badge').textContent = `⚔️ DUEL 1v1 (${room.code})`;
-        this.switchView('quiz-view');
-        this.renderCurrentQuestion(this.quizEngine.getCurrentQuestion());
-        this.startTimer();
+    // Join Private Room
+    safeOn('btn-join-duel', 'click', async () => {
+      const profile = StorageManager.getProfile();
+      if (!profile.cloudAccount?.username) {
+        const warn = document.getElementById('duel-cloud-warning');
+        if (warn) warn.style.display = 'block';
+        return;
+      }
+      const codeInput = document.getElementById('input-duel-code').value.trim().toUpperCase();
+      if (!codeInput) { alert('Veuillez entrer un code de salon !'); return; }
+
+      const res = await MultiplayerEngine.joinPrivateRoom(codeInput);
+      if (!res.success) { alert(res.message); return; }
+
+      // Notify host via broadcast
+      const channel = MultiplayerEngine.subscribeToBattle(res.battle.id, {});
+      MultiplayerEngine.broadcastEvent(channel, 'player_joined', {
+        player2_id: res.battle.player2_id,
+        player2_name: res.battle.player2_name,
+        player2_avatar: res.battle.player2_avatar
       });
-    }
+
+      this.enterDuelLobby(res.battle, channel);
+    });
+
+    // Duel Ready button
+    safeOn('btn-duel-ready', 'click', async () => {
+      if (!this.duelState) return;
+      const btn = document.getElementById('btn-duel-ready');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ En attente de l\'adversaire...'; }
+
+      const playerNum = this.duelState.playerNum;
+      await MultiplayerEngine.markReady(this.duelState.battleId, playerNum);
+
+      // Broadcast ready
+      MultiplayerEngine.broadcastEvent(this.duelState.channel, 'player_ready', { playerNum });
+
+      // Check if both ready
+      const el = playerNum === 1 ? document.getElementById('lobby-p1-ready') : document.getElementById('lobby-p2-ready');
+      if (el) { el.textContent = '✅ Prêt !'; el.style.color = 'var(--accent-green)'; }
+
+      const battle = await MultiplayerEngine.getBattle(this.duelState.battleId);
+      if (battle && battle.player1_ready && battle.player2_ready) {
+        this.startDuelCountdown();
+      }
+    });
+
+    // Duel back home
+    safeOn('btn-duel-back-home', 'click', () => {
+      this.cleanupDuel();
+      this.showDuelScreen('menu');
+    });
 
     safeOn('btn-quick-play', 'click', () => {
       const subjects = Object.keys(StorageManager.getSubjects());

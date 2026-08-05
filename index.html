@@ -132,93 +132,201 @@
 
     <!-- 2. DUELS 1V1 & LEADERBOARD VIEW -->
     <section id="duels-view" class="view-section">
-      <div class="section-title">⚔️ Arène de Duel 1v1 & Pari de Pièces</div>
+      <div class="section-title">⚔️ Arène de Duel 1v1</div>
 
-      <!-- Mobile friendly instructions -->
-      <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid var(--accent-purple); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; font-size: 0.9rem;">
-        🌐 <strong>Jouez en ligne avec vos amis depuis chez vous ou sur votre smartphone !</strong><br>
-        Créez un salon, donnez le code <code>DUEL-XXXX</code> à votre ami(e) et affrontez-vous en direct avec pari de pièces !
-      </div>
+      <!-- SCREEN 1: Duel Menu -->
+      <div id="duel-menu-screen">
+        <!-- Instruction Banner -->
+        <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid var(--accent-purple); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; font-size: 0.9rem;">
+          🌐 <strong>Affrontez d'autres joueurs en temps réel !</strong><br>
+          Matchmaking automatique ou salon privé avec code. Les 2 joueurs répondent aux mêmes questions simultanément. ⚡
+        </div>
 
-      <!-- Duel Mode Selection Cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 2.5rem;">
-        <!-- Create Room Card -->
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-lg);">
-          <h3 style="font-family: var(--font-title); font-size: 1.2rem; color: var(--accent-cyan); margin-bottom: 1rem;">🥊 Créer un Salon de Duel</h3>
-
-          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Matière du Duel :</label>
-          <select id="duel-subject-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1rem;">
+        <!-- Subject Selector -->
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">📚 Matière du Duel :</label>
+          <select id="duel-subject-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white;">
             <!-- Injected via JS -->
           </select>
-
-          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Montant du Pari (🪙 Pièces) :</label>
-          <select id="duel-wager-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1.25rem;">
-            <option value="0">0 🪙 (Amical / Sans pari)</option>
-            <option value="50">50 🪙 (Pot total : 100 🪙)</option>
-            <option value="100" selected>100 🪙 (Pot total : 200 🪙)</option>
-            <option value="250">250 🪙 (Pot total : 500 🪙)</option>
-            <option value="500">500 🪙 (Pot total : 1 000 🪙)</option>
-          </select>
-
-          <button class="btn-primary" id="btn-create-duel" style="width: 100%;">Lancer et Générer le Code ➔</button>
         </div>
 
-        <!-- Join Room Card -->
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-lg);">
-          <h3 style="font-family: var(--font-title); font-size: 1.2rem; color: var(--accent-purple); margin-bottom: 1rem;">🔑 Rejoindre un Duel via Code</h3>
+        <!-- Wager Toggle (disabled by default) -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+            <label style="font-size: 0.95rem; font-weight: 600;">🪙 Pari de Pièces</label>
+            <label class="toggle-switch" style="position: relative; display: inline-block; width: 48px; height: 26px;">
+              <input type="checkbox" id="duel-wager-toggle" style="opacity: 0; width: 0; height: 0;">
+              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.15); border-radius: 13px; transition: 0.3s;" id="duel-wager-slider"></span>
+            </label>
+          </div>
+          <div id="duel-wager-options" style="display: none;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Montant (chaque joueur mise la même somme) :</label>
+            <select id="duel-wager-select" style="width: 100%; padding: 0.65rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white;">
+              <option value="50">50 🪙 (Pot : 100 🪙)</option>
+              <option value="100">100 🪙 (Pot : 200 🪙)</option>
+              <option value="250">250 🪙 (Pot : 500 🪙)</option>
+              <option value="500">500 🪙 (Pot : 1 000 🪙)</option>
+            </select>
+          </div>
+          <div id="duel-wager-disabled-label" style="font-size: 0.8rem; color: var(--text-secondary);">
+            Mode amical — aucun pari. Activez pour miser des pièces.
+          </div>
+        </div>
 
-          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Code du Salon (Ex: DUEL-A8F2) :</label>
-          <input type="text" id="input-duel-code" placeholder="Entrez le code DUEL-XXXX..." style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; font-weight: 700; text-transform: uppercase; margin-bottom: 1.25rem;">
+        <!-- Action Buttons -->
+        <div style="display: grid; gap: 1rem; margin-bottom: 2rem;">
+          <!-- Matchmaking Auto -->
+          <button class="btn-primary" id="btn-matchmaking" style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 700;">
+            🎯 Matchmaking Automatique
+          </button>
 
-          <button class="btn-secondary" id="btn-join-duel" style="width: 100%;">Rejoindre le Duel ⚔️</button>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <!-- Create Private -->
+            <button class="btn-secondary" id="btn-create-duel" style="width: 100%; padding: 0.85rem;">
+              🔒 Créer Salon Privé
+            </button>
+            <!-- Join Private -->
+            <button class="btn-secondary" id="btn-join-duel-show" style="width: 100%; padding: 0.85rem;">
+              🔑 Rejoindre via Code
+            </button>
+          </div>
+
+          <!-- Join Code Input (hidden by default) -->
+          <div id="duel-join-box" style="display: none; background: var(--bg-card); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">Code du Salon :</label>
+            <div style="display: flex; gap: 0.75rem;">
+              <input type="text" id="input-duel-code" placeholder="Ex: A8F2GK" maxlength="6" style="flex: 1; padding: 0.75rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; text-align: center; font-size: 1.2rem;">
+              <button class="btn-primary" id="btn-join-duel" style="padding: 0.75rem 1.5rem;">Rejoindre ⚔️</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cloud Account Warning -->
+        <div id="duel-cloud-warning" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; font-size: 0.85rem; color: #fca5a5;">
+          ⚠️ <strong>Compte Cloud requis !</strong> Connectez-vous à un Compte Cloud dans le menu Profil pour jouer en duel en ligne.
         </div>
       </div>
 
-      <!-- Active Arena Match Display -->
-      <div id="duel-arena-box" style="display: none; background: rgba(255,255,255,0.03); border: 2px solid var(--accent-purple); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 2.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <span style="font-size: 2rem;" id="arena-user-avatar">🎓</span>
-            <div>
-              <div style="font-weight: 700;" id="arena-user-name">Vous</div>
-              <div style="color: var(--accent-green); font-size: 1.1rem; font-weight: 800;" id="arena-user-score">0 Pts</div>
+      <!-- SCREEN 2: Matchmaking Waiting -->
+      <div id="duel-matchmaking-screen" style="display: none; text-align: center; padding: 3rem 1rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem; animation: pulse 1.5s infinite;">🔍</div>
+        <div style="font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem;">Recherche d'un adversaire...</div>
+        <div style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 0.9rem;" id="matchmaking-status-text">Recherche en cours sur la matière sélectionnée</div>
+        <div style="margin-bottom: 2rem;">
+          <div class="spinner" style="width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--accent-cyan); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+        </div>
+        <button class="btn-secondary" id="btn-cancel-matchmaking" style="padding: 0.75rem 2rem;">❌ Annuler la recherche</button>
+      </div>
+
+      <!-- SCREEN 3: Duel Lobby (both players connected) -->
+      <div id="duel-lobby-screen" style="display: none;">
+        <div style="background: var(--bg-card); border: 2px solid var(--accent-purple); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem;">
+          <!-- VS Display -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 2.5rem;" id="lobby-p1-avatar">🎓</div>
+              <div style="font-weight: 700; margin-top: 0.3rem;" id="lobby-p1-name">Joueur 1</div>
+              <div id="lobby-p1-ready" style="font-size: 0.8rem; color: var(--text-secondary);">⏳ En attente...</div>
+            </div>
+            <div style="text-align: center; padding: 0 1rem;">
+              <div style="font-size: 2rem; font-weight: 900; color: var(--accent-red);">VS</div>
+              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.3rem;" id="lobby-room-code">CODE</div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 2.5rem;" id="lobby-p2-avatar">⚔️</div>
+              <div style="font-weight: 700; margin-top: 0.3rem;" id="lobby-p2-name">Adversaire</div>
+              <div id="lobby-p2-ready" style="font-size: 0.8rem; color: var(--text-secondary);">⏳ En attente...</div>
             </div>
           </div>
 
+          <!-- Wager / Subject Info -->
+          <div style="text-align: center; margin-bottom: 1.25rem;">
+            <span class="level-badge" style="background: var(--gradient-main); font-size: 0.9rem;" id="lobby-pot-badge">Mode Amical</span>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.4rem;" id="lobby-subject-name">Matière</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">10 questions • Réponse simultanée</div>
+          </div>
+
+          <!-- Ready Button -->
+          <button class="btn-primary" id="btn-duel-ready" style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 700;">
+            ✅ Je suis Prêt !
+          </button>
+        </div>
+
+        <!-- Countdown Overlay -->
+        <div id="duel-countdown-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; display: none; justify-content: center; align-items: center;">
+          <div style="font-size: 6rem; font-weight: 900; color: white; text-shadow: 0 0 40px var(--accent-cyan);" id="countdown-number">3</div>
+        </div>
+      </div>
+
+      <!-- SCREEN 4: Duel Results -->
+      <div id="duel-results-screen" style="display: none; text-align: center; padding: 2rem 1rem;">
+        <div style="font-size: 3.5rem; margin-bottom: 0.5rem;" id="duel-result-emoji">🏆</div>
+        <div style="font-size: 1.8rem; font-weight: 900; margin-bottom: 1.5rem;" id="duel-result-title">VICTOIRE !</div>
+
+        <div style="display: flex; justify-content: center; align-items: center; gap: 2rem; margin-bottom: 2rem;">
           <div style="text-align: center;">
-            <span class="level-badge" style="background: var(--gradient-main); font-size: 0.9rem;" id="arena-pot-badge">Pot : 200 🪙</span>
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem;" id="arena-room-code">DUEL-1234</div>
+            <div style="font-size: 1.8rem;" id="duel-res-p1-avatar">🎓</div>
+            <div style="font-weight: 700; font-size: 0.9rem;" id="duel-res-p1-name">Vous</div>
+            <div style="font-size: 1.5rem; font-weight: 900; color: var(--accent-green);" id="duel-res-p1-score">0</div>
           </div>
-
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <div style="text-align: right;">
-              <div style="font-weight: 700;" id="arena-opp-name">Adversaire</div>
-              <div style="color: var(--accent-red); font-size: 1.1rem; font-weight: 800;" id="arena-opp-score">0 Pts</div>
-            </div>
-            <span style="font-size: 2rem;" id="arena-opp-avatar">⚔️</span>
+          <div style="font-size: 1.5rem; font-weight: 900; color: var(--text-secondary);">VS</div>
+          <div style="text-align: center;">
+            <div style="font-size: 1.8rem;" id="duel-res-p2-avatar">⚔️</div>
+            <div style="font-weight: 700; font-size: 0.9rem;" id="duel-res-p2-name">Adversaire</div>
+            <div style="font-size: 1.5rem; font-weight: 900; color: var(--accent-red);" id="duel-res-p2-score">0</div>
           </div>
         </div>
 
-        <button class="btn-primary" id="btn-arena-start-match" style="width: 100%;">Combattre ! ⚔️</button>
+        <div id="duel-res-coins-banner" style="background: rgba(16, 185, 129, 0.15); border: 1px solid var(--accent-green); padding: 1rem; border-radius: var(--radius-md); font-weight: 700; font-size: 1.1rem; margin-bottom: 1.5rem; color: #6ee7b7;">
+          +0 🪙
+        </div>
+
+        <button class="btn-primary" id="btn-duel-back-home" style="width: 100%; padding: 1rem;">🏠 Retour à l'Arène</button>
       </div>
+
+      <!-- Duel Battle HUD (shown inside quiz-view during duel mode) -->
+      <template id="duel-hud-template">
+        <div id="duel-hud" style="background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+          <div style="text-align: center;">
+            <span style="font-size: 1.2rem;" id="duel-hud-p1-avatar">🎓</span>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);" id="duel-hud-p1-name">Vous</div>
+            <div style="font-weight: 800; color: var(--accent-green); font-size: 1.1rem;" id="duel-hud-p1-score">0</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-weight: 900; color: var(--accent-red); font-size: 1rem;">⚔️</div>
+            <div style="font-size: 0.7rem; color: var(--text-secondary);" id="duel-hud-timer">3:00</div>
+          </div>
+          <div style="text-align: center;">
+            <span style="font-size: 1.2rem;" id="duel-hud-p2-avatar">⚔️</span>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);" id="duel-hud-p2-name">Adversaire</div>
+            <div style="font-weight: 800; color: var(--accent-red); font-size: 1.1rem;" id="duel-hud-p2-score">0</div>
+          </div>
+        </div>
+        <!-- Received Emotes Display -->
+        <div id="duel-emotes-received" style="position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); z-index: 100; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;"></div>
+        <!-- Emoji Bar -->
+        <div id="duel-emoji-bar" style="display: flex; justify-content: center; gap: 0.4rem; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: var(--radius-md); margin-top: 0.75rem; flex-wrap: wrap;"></div>
+      </template>
 
       <!-- Leaderboard Table Section -->
-      <div class="section-title">🏆 Classement Général des Joueurs</div>
-      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 500px;">
-          <thead>
-            <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-size: 0.85rem;">
-              <th style="padding: 0.85rem 1rem;">Rang</th>
-              <th style="padding: 0.85rem 1rem;">Joueur</th>
-              <th style="padding: 0.85rem 1rem;">Niveau</th>
-              <th style="padding: 0.85rem 1rem;">Pièces 🪙</th>
-              <th style="padding: 0.85rem 1rem;">Victoires ⚔️</th>
-            </tr>
-          </thead>
-          <tbody id="leaderboard-tbody">
-            <!-- Injected via JS -->
-          </tbody>
-        </table>
+      <div id="duel-leaderboard-section">
+        <div class="section-title" style="margin-top: 2rem;">🏆 Classement Général des Joueurs</div>
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 500px;">
+            <thead>
+              <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-size: 0.85rem;">
+                <th style="padding: 0.85rem 1rem;">Rang</th>
+                <th style="padding: 0.85rem 1rem;">Joueur</th>
+                <th style="padding: 0.85rem 1rem;">Niveau</th>
+                <th style="padding: 0.85rem 1rem;">Pièces 🪙</th>
+                <th style="padding: 0.85rem 1rem;">Victoires ⚔️</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-tbody">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 

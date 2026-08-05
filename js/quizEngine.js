@@ -14,23 +14,29 @@ export class QuizEngine {
       throw new Error('Aucune question disponible pour ce sujet.');
     }
 
-    const allSRS = StorageManager.getSRSData();
-    const now = Date.now();
+    let finalQuestions;
 
-    let sortedQuestions = [...questions].sort((a, b) => {
-      const srsA = allSRS[a.id];
-      const srsB = allSRS[b.id];
-      const dueA = srsA ? (srsA.nextDue <= now ? 0 : 1) : 0;
-      const dueB = srsB ? (srsB.nextDue <= now ? 0 : 1) : 0;
-      if (dueA !== dueB) return dueA - dueB;
-      const mA = srsA ? srsA.mastery : -1;
-      const mB = srsB ? srsB.mastery : -1;
-      return mA - mB;
-    });
+    if (mode === 'duel') {
+      finalQuestions = [...questions];
+    } else {
+      const allSRS = StorageManager.getSRSData();
+      const now = Date.now();
 
-    let finalQuestions = sortedQuestions;
-    if (mode === 'classic') {
-      finalQuestions = sortedQuestions.slice(0, 10);
+      let sortedQuestions = [...questions].sort((a, b) => {
+        const srsA = allSRS[a.id];
+        const srsB = allSRS[b.id];
+        const dueA = srsA ? (srsA.nextDue <= now ? 0 : 1) : 0;
+        const dueB = srsB ? (srsB.nextDue <= now ? 0 : 1) : 0;
+        if (dueA !== dueB) return dueA - dueB;
+        const mA = srsA ? srsA.mastery : -1;
+        const mB = srsB ? srsB.mastery : -1;
+        return mA - mB;
+      });
+
+      finalQuestions = sortedQuestions;
+      if (mode === 'classic') {
+        finalQuestions = sortedQuestions.slice(0, 10);
+      }
     }
 
     const prepared = finalQuestions.map(q => this.prepareQuestion(q));
