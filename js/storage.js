@@ -336,6 +336,38 @@ export class StorageManager {
     } catch (e) { return []; }
   }
 
+  static addRevisionItem(questionObj, subjectId) {
+    if (!questionObj) return;
+    try {
+      const items = this.getRevisionItems();
+      const existingIdx = items.findIndex(item => item.question === questionObj.question);
+      const itemData = {
+        id: questionObj.id || Math.random().toString(36).substring(2, 9),
+        question: questionObj.question,
+        options: questionObj.options || questionObj.shuffledOptions || [],
+        correct: questionObj.correct,
+        explanation: questionObj.explanation || '',
+        subjectId: subjectId,
+        addedAt: Date.now()
+      };
+      if (existingIdx >= 0) {
+        items[existingIdx] = itemData;
+      } else {
+        items.push(itemData);
+      }
+      localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(items));
+    } catch (e) {}
+  }
+
+  static removeRevisionItem(questionText) {
+    if (!questionText) return;
+    try {
+      let items = this.getRevisionItems();
+      items = items.filter(item => item.question !== questionText);
+      localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(items));
+    } catch (e) {}
+  }
+
   static exportAllData() {
     const backup = { subjects: this.getSubjects(), profile: this.getProfile(), settings: this.getSettings(), srs: this.getSRSData(), exportDate: new Date().toISOString() };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
