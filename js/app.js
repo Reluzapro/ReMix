@@ -573,20 +573,34 @@ class AppController {
     if (result.wasCorrect) {
       if (selectedCard) {
         selectedCard.classList.add('correct');
+        selectedCard.style.backgroundColor = 'rgba(16, 185, 129, 0.35)';
+        selectedCard.style.borderColor = '#10b981';
+        selectedCard.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.4)';
+        selectedCard.style.color = '#a7f3d0';
         const checkEl = selectedCard.querySelector('.opt-check');
         if (checkEl) checkEl.textContent = '✓';
       }
     } else {
       if (selectedCard) {
         selectedCard.classList.add('wrong');
+        selectedCard.style.backgroundColor = 'rgba(239, 68, 68, 0.4)';
+        selectedCard.style.borderColor = '#ef4444';
+        selectedCard.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.5)';
+        selectedCard.style.color = '#fca5a5';
         const checkEl = selectedCard.querySelector('.opt-check');
         if (checkEl) checkEl.textContent = '✗';
       }
 
       // Highlight exact correct answer in green
       allCards.forEach(c => {
-        if (c.getAttribute('data-option') === result.correctAnswer) {
+        const optVal = c.getAttribute('data-option');
+        const textVal = c.querySelector('span')?.textContent || c.textContent;
+        if (optVal === result.correctAnswer || textVal.trim() === result.correctAnswer.trim()) {
           c.classList.add('correct');
+          c.style.backgroundColor = 'rgba(16, 185, 129, 0.35)';
+          c.style.borderColor = '#10b981';
+          c.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.4)';
+          c.style.color = '#a7f3d0';
           const checkEl = c.querySelector('.opt-check');
           if (checkEl) checkEl.textContent = '✓';
         }
