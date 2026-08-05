@@ -9731,7 +9731,7 @@ async function fetchCloudLeaderboard() {
 
 // --- PROFILE SYNC (multi-device account) ---
 
-async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData) {
+async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData, pausedSession = null, revisionItems = []) {
   try {
     const db = getDB();
     if (!db) return;
@@ -9739,8 +9739,9 @@ async function pushProfileToCloud(username, hashedKey, profile, srsData, subject
       username: username.toLowerCase(),
       hashed_key: hashedKey,
       profile_data: profile,
-      srs_data: srsData,
+      srs_data: { srs: srsData, revisionItems: revisionItems },
       subjects_data: subjectsData,
+      paused_session: pausedSession,
       updated_at: Date.now()
     }, { onConflict: 'username,hashed_key' });
   } catch (e) {
@@ -10043,16 +10044,32 @@ class StorageManager {
   }
 
   /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
+  /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   static async autoSyncCloud() {
     const profile = this.getProfile();
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return;
     const { username, hashedKey } = profile.cloudAccount;
     // Also update localStorage cloud key for offline fallback
     const cloudKey = `remix_cloud_db_${username}_${hashedKey}`;
-    const payload = { profile, srs: this.getSRSData(), subjects: this.getSubjects(), updatedAt: Date.now() };
+    const payload = {
+      profile,
+      srs: this.getSRSData(),
+      subjects: this.getSubjects(),
+      pausedSession: this.getPausedSession(),
+      revisionItems: this.getRevisionItems(),
+      updatedAt: Date.now()
+    };
     try { localStorage.setItem(cloudKey, JSON.stringify(payload)); } catch (e) {}
     // Sync to Supabase
-    pushProfileToCloud(username, hashedKey, profile, this.getSRSData(), this.getSubjects()).catch(() => {});
+    pushProfileToCloud(
+      username,
+      hashedKey,
+      profile,
+      this.getSRSData(),
+      this.getSubjects(),
+      this.getPausedSession(),
+      this.getRevisionItems()
+    ).catch(() => {});
   }
 
   static async _hashPasscodeCheck(passcode) {
@@ -10074,8 +10091,14 @@ class StorageManager {
     if (cloudData) {
       const profile = cloudData.profile_data;
       this.saveProfile(profile);
-      if (cloudData.srs_data) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
+      if (cloudData.srs_data) {
+        if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
+        else localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
+
+        if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+      }
       if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
+      if (cloudData.paused_session) localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
       return { success: true, isNew: false, profile };
     }
 
@@ -10087,6 +10110,8 @@ class StorageManager {
       this.saveProfile(parsed.profile);
       if (parsed.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(parsed.srs));
       if (parsed.subjects) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(parsed.subjects));
+      if (parsed.pausedSession) localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(parsed.pausedSession));
+      if (parsed.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(parsed.revisionItems));
       return { success: true, isNew: false, profile: parsed.profile };
     }
 
@@ -10095,7 +10120,7 @@ class StorageManager {
     profile.name = username.trim();
     profile.cloudAccount = { username: cleanUser, hashedKey };
     this.saveProfile(profile);
-    pushProfileToCloud(cleanUser, hashedKey, profile, this.getSRSData(), this.getSubjects()).catch(() => {});
+    pushProfileToCloud(cleanUser, hashedKey, profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems()).catch(() => {});
     return { success: true, isNew: true, profile };
   }
 
@@ -10126,6 +10151,7 @@ class StorageManager {
         items.push(itemData);
       }
       localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(items));
+      this.autoSyncCloud();
     } catch (e) {}
   }
 
@@ -10135,6 +10161,7 @@ class StorageManager {
       let items = this.getRevisionItems();
       items = items.filter(item => item.question !== questionText);
       localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(items));
+      this.autoSyncCloud();
     } catch (e) {}
   }
 
@@ -10154,6 +10181,7 @@ class StorageManager {
       if (data.profile) this.saveProfile(data.profile);
       if (data.settings) this.saveSettings(data.settings);
       if (data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(data.srs));
+      this.autoSyncCloud();
       return { success: true };
     } catch (e) { return { success: false, error: e.message }; }
   }
@@ -10161,9 +10189,11 @@ class StorageManager {
   static savePausedSession(sessionData) {
     if (!sessionData) {
       localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+      this.autoSyncCloud();
       return;
     }
     localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(sessionData));
+    this.autoSyncCloud();
   }
 
   static getPausedSession() {
@@ -10178,6 +10208,7 @@ class StorageManager {
 
   static clearPausedSession() {
     localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+    this.autoSyncCloud();
   }
 
   static resetAllData() {

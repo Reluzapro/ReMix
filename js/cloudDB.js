@@ -56,7 +56,7 @@ export async function fetchCloudLeaderboard() {
 
 // --- PROFILE SYNC (multi-device account) ---
 
-export async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData) {
+export async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData, pausedSession = null, revisionItems = []) {
   try {
     const db = getDB();
     if (!db) return;
@@ -64,8 +64,9 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
       username: username.toLowerCase(),
       hashed_key: hashedKey,
       profile_data: profile,
-      srs_data: srsData,
+      srs_data: { srs: srsData, revisionItems: revisionItems },
       subjects_data: subjectsData,
+      paused_session: pausedSession,
       updated_at: Date.now()
     }, { onConflict: 'username,hashed_key' });
   } catch (e) {
