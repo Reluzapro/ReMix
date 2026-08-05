@@ -200,10 +200,28 @@ export class QuizEngine {
     };
   }
 
+  resumeSession(pausedState) {
+    if (!pausedState) return null;
+
+    // Apply anti-cheat penalty: deduct 10 seconds from remaining session timer
+    const updatedTimer = Math.max(0, (pausedState.sessionTimer || 180) - 10);
+    // Anti-cheat: advance to the next question so user cannot cheat on paused question
+    const updatedIndex = pausedState.currentIndex + 1;
+
+    this.currentSession = {
+      ...pausedState,
+      sessionTimer: updatedTimer,
+      currentIndex: updatedIndex
+    };
+
+    return this.getCurrentQuestion();
+  }
+
   finishSession() {
     if (!this.currentSession) return null;
 
     clearInterval(this.timerInterval);
+    StorageManager.clearPausedSession();
 
     const correct = this.currentSession.correctCount;
     const totalAnswered = correct + this.currentSession.wrongCount + this.currentSession.skippedCount;
@@ -219,7 +237,7 @@ export class QuizEngine {
     profile.stats.wrongAnswers += this.currentSession.wrongCount;
     profile.stats.skippedAnswers += this.currentSession.skippedCount;
 
-    if (accuracy === 100 && total >= 5) {
+    if (accuracy === 100 && totalAnswered >= 5) {
       profile.stats.perfectGames += 1;
     }
 
@@ -230,7 +248,7 @@ export class QuizEngine {
       score: this.currentSession.score,
       correctCount: correct,
       wrongCount: this.currentSession.wrongCount,
-      totalQuestions: total,
+      totalQuestions: totalAnswered,
       accuracy: accuracy,
       xpEarned: xpEarned,
       coinsEarned: coinsEarned,

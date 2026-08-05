@@ -8,7 +8,8 @@ const STORAGE_KEYS = {
   REVISION_ITEMS: 'rev_game_revision_items_v2',
   CARD_SRS: 'rev_game_card_srs_v2',
   SETTINGS: 'rev_game_settings_v2',
-  GLOBAL_LEADERBOARD: 'remix_global_leaderboard_v1'
+  GLOBAL_LEADERBOARD: 'remix_global_leaderboard_v1',
+  PAUSED_SESSION: 'remix_paused_session_v1'
 };
 
 const CHECKSUM_SECRET = 'remix_anti_cheat_secret_sig_2026';
@@ -353,6 +354,28 @@ export class StorageManager {
       if (data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(data.srs));
       return { success: true };
     } catch (e) { return { success: false, error: e.message }; }
+  }
+
+  static savePausedSession(sessionData) {
+    if (!sessionData) {
+      localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+      return;
+    }
+    localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(sessionData));
+  }
+
+  static getPausedSession() {
+    const data = localStorage.getItem(STORAGE_KEYS.PAUSED_SESSION);
+    if (!data) return null;
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static clearPausedSession() {
+    localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
   }
 
   static resetAllData() {

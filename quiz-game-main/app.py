@@ -2497,4 +2497,6 @@ def handle_send_emote(data):
         }, room=f'battle_{battle_id}', include_self=False)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5001)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() in ['true', '1']
+    socketio.run(app, debug=debug_mode, host='0.0.0.0', port=5001)
+

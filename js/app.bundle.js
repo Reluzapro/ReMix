@@ -9778,7 +9778,8 @@ const STORAGE_KEYS = {
   REVISION_ITEMS: 'rev_game_revision_items_v2',
   CARD_SRS: 'rev_game_card_srs_v2',
   SETTINGS: 'rev_game_settings_v2',
-  GLOBAL_LEADERBOARD: 'remix_global_leaderboard_v1'
+  GLOBAL_LEADERBOARD: 'remix_global_leaderboard_v1',
+  PAUSED_SESSION: 'remix_paused_session_v1'
 };
 
 const CHECKSUM_SECRET = 'remix_anti_cheat_secret_sig_2026';
@@ -10123,6 +10124,28 @@ class StorageManager {
       if (data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(data.srs));
       return { success: true };
     } catch (e) { return { success: false, error: e.message }; }
+  }
+
+  static savePausedSession(sessionData) {
+    if (!sessionData) {
+      localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+      return;
+    }
+    localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(sessionData));
+  }
+
+  static getPausedSession() {
+    const data = localStorage.getItem(STORAGE_KEYS.PAUSED_SESSION);
+    if (!data) return null;
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static clearPausedSession() {
+    localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
   }
 
   static resetAllData() {
@@ -10559,7 +10582,8 @@ class GamificationEngine {
   }
 
   static calculatePoints(isCorrect, streak, powerupActive = false) {
-    if (!isCorrect) return -10;
+    if (isCorrect === false) return -5;
+    if (isCorrect === null || isCorrect === undefined) return 0;
     let base = 10;
     let multiplier = 1;
     if (streak >= 10) multiplier = 3;
@@ -10897,10 +10921,28 @@ class QuizEngine {
     };
   }
 
+  resumeSession(pausedState) {
+    if (!pausedState) return null;
+
+    // Apply anti-cheat penalty: deduct 10 seconds from remaining session timer
+    const updatedTimer = Math.max(0, (pausedState.sessionTimer || 180) - 10);
+    // Anti-cheat: advance to the next question so user cannot cheat on paused question
+    const updatedIndex = pausedState.currentIndex + 1;
+
+    this.currentSession = {
+      ...pausedState,
+      sessionTimer: updatedTimer,
+      currentIndex: updatedIndex
+    };
+
+    return this.getCurrentQuestion();
+  }
+
   finishSession() {
     if (!this.currentSession) return null;
 
     clearInterval(this.timerInterval);
+    StorageManager.clearPausedSession();
 
     const correct = this.currentSession.correctCount;
     const totalAnswered = correct + this.currentSession.wrongCount + this.currentSession.skippedCount;
@@ -10916,7 +10958,7 @@ class QuizEngine {
     profile.stats.wrongAnswers += this.currentSession.wrongCount;
     profile.stats.skippedAnswers += this.currentSession.skippedCount;
 
-    if (accuracy === 100 && total >= 5) {
+    if (accuracy === 100 && totalAnswered >= 5) {
       profile.stats.perfectGames += 1;
     }
 
@@ -10927,7 +10969,7 @@ class QuizEngine {
       score: this.currentSession.score,
       correctCount: correct,
       wrongCount: this.currentSession.wrongCount,
-      totalQuestions: total,
+      totalQuestions: totalAnswered,
       accuracy: accuracy,
       xpEarned: xpEarned,
       coinsEarned: coinsEarned,
@@ -11156,6 +11198,7 @@ class AppController {
     this.setupNavigation();
     this.renderCategoryFilters();
     this.renderSubjects();
+    this.updatePausedBanner();
     this.renderShop();
     this.renderProfile();
     this.setupCSVImporter();
@@ -11279,7 +11322,10 @@ class AppController {
       target.classList.add('active');
     }
 
-    if (viewId === 'subjects-view') this.renderSubjects();
+    if (viewId === 'subjects-view') {
+      this.renderSubjects();
+      this.updatePausedBanner();
+    }
     if (viewId === 'duels-view') this.renderDuelsView();
     if (viewId === 'shop-view') this.renderShop();
     if (viewId === 'profile-view') this.renderProfile();
@@ -11530,7 +11576,115 @@ class AppController {
   }
 
 
-  startQuiz(subjectId, mode = 'classic') {
+  updatePausedBanner() {
+    const container = document.getElementById('paused-banner-container');
+    const info = document.getElementById('paused-banner-info');
+    if (!container) return;
+
+    const paused = StorageManager.getPausedSession();
+    if (!paused) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const subjects = StorageManager.getSubjects();
+    const subName = subjects[paused.subjectId]?.name || 'Quiz';
+    const m = Math.floor(Math.max(0, paused.sessionTimer) / 60);
+    const s = Math.floor(Math.max(0, paused.sessionTimer) % 60);
+    const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+
+    if (info) {
+      info.textContent = `Sujet : ${subName} • Score : ${paused.score || 0} Pts • Chrono restant : ${timeStr}`;
+    }
+    container.style.display = 'block';
+  }
+
+  pauseQuizSession() {
+    clearInterval(this.timerInterval);
+    const modal = document.getElementById('modal-quiz-pause');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+    }
+  }
+
+  saveAndExitQuizSession() {
+    clearInterval(this.timerInterval);
+    const session = this.quizEngine.currentSession;
+    if (session) {
+      StorageManager.savePausedSession(session);
+    }
+    this.closePauseModal();
+    this.quizEngine.currentSession = null;
+    this.switchView('subjects-view');
+  }
+
+  resumeQuizSession() {
+    const paused = StorageManager.getPausedSession() || this.quizEngine.currentSession;
+    if (!paused) return;
+
+    StorageManager.clearPausedSession();
+    this.closePauseModal();
+
+    const nextQ = this.quizEngine.resumeSession(paused);
+    const subjects = StorageManager.getSubjects();
+    const sub = subjects[paused.subjectId];
+    if (sub) {
+      const badge = document.getElementById('quiz-subject-badge');
+      if (badge) badge.textContent = sub.name;
+    }
+
+    this.switchView('quiz-view');
+    this.renderCurrentQuestion(nextQ);
+    this.startTimer();
+  }
+
+  abandonQuizSession() {
+    clearInterval(this.timerInterval);
+    this.quizEngine.currentSession = null;
+    StorageManager.clearPausedSession();
+    this.closePauseModal();
+    this.switchView('subjects-view');
+  }
+
+  discardPausedSession() {
+    StorageManager.clearPausedSession();
+    this.updatePausedBanner();
+  }
+
+  closePauseModal() {
+    const modal = document.getElementById('modal-quiz-pause');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+    }
+  }
+
+  closeOverwriteModal() {
+    const modal = document.getElementById('modal-confirm-overwrite');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+    }
+  }
+
+  startQuiz(subjectId, mode = 'classic', force = false) {
+    const paused = StorageManager.getPausedSession();
+    if (paused && !force) {
+      this.pendingNewQuiz = { subjectId, mode };
+      const modal = document.getElementById('modal-confirm-overwrite');
+      if (modal) {
+        modal.style.display = 'flex';
+        modal.style.visibility = 'visible';
+      }
+      return;
+    }
+
+    if (force) {
+      StorageManager.clearPausedSession();
+      this.updatePausedBanner();
+    }
+
     const subjects = StorageManager.getSubjects();
     const sub = subjects[subjectId];
     if (!sub || !sub.questions || sub.questions.length === 0) {
@@ -11547,7 +11701,9 @@ class AppController {
       sessionTimerSeconds: 180 // 3 minutes = 180 seconds
     });
 
-    document.getElementById('quiz-subject-badge').textContent = sub.name;
+    const badge = document.getElementById('quiz-subject-badge');
+    if (badge) badge.textContent = sub.name;
+
     this.switchView('quiz-view');
     this.renderCurrentQuestion(firstQuestion);
     this.startTimer();
@@ -11996,7 +12152,27 @@ class AppController {
     reader.readAsText(file, 'UTF-8');
   }
 
-  setupEventListeners() {
+    // Quiz Pause & Resume Buttons
+    const safeOn = (id, event, fn) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener(event, fn);
+    };
+
+    safeOn('btn-quiz-pause', 'click', () => this.pauseQuizSession());
+    safeOn('btn-pause-resume', 'click', () => this.resumeQuizSession());
+    safeOn('btn-pause-save-exit', 'click', () => this.saveAndExitQuizSession());
+    safeOn('btn-pause-abandon', 'click', () => this.abandonQuizSession());
+    safeOn('btn-resume-banner', 'click', () => this.resumeQuizSession());
+    safeOn('btn-discard-banner', 'click', () => this.discardPausedSession());
+    safeOn('btn-confirm-cancel', 'click', () => this.closeOverwriteModal());
+    safeOn('btn-confirm-overwrite', 'click', () => {
+      this.closeOverwriteModal();
+      if (this.pendingNewQuiz) {
+        this.startQuiz(this.pendingNewQuiz.subjectId, this.pendingNewQuiz.mode, true);
+        this.pendingNewQuiz = null;
+      }
+    });
+
     // Cloud Account Modal Trigger Button
     const btnOpenCloudModal = document.getElementById('btn-open-cloud-modal');
     if (btnOpenCloudModal) {

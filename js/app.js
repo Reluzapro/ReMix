@@ -24,6 +24,7 @@ class AppController {
     this.setupNavigation();
     this.renderCategoryFilters();
     this.renderSubjects();
+    this.updatePausedBanner();
     this.renderShop();
     this.renderProfile();
     this.setupCSVImporter();
@@ -147,7 +148,10 @@ class AppController {
       target.classList.add('active');
     }
 
-    if (viewId === 'subjects-view') this.renderSubjects();
+    if (viewId === 'subjects-view') {
+      this.renderSubjects();
+      this.updatePausedBanner();
+    }
     if (viewId === 'duels-view') this.renderDuelsView();
     if (viewId === 'shop-view') this.renderShop();
     if (viewId === 'profile-view') this.renderProfile();
@@ -398,7 +402,115 @@ class AppController {
   }
 
 
-  startQuiz(subjectId, mode = 'classic') {
+  updatePausedBanner() {
+    const container = document.getElementById('paused-banner-container');
+    const info = document.getElementById('paused-banner-info');
+    if (!container) return;
+
+    const paused = StorageManager.getPausedSession();
+    if (!paused) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const subjects = StorageManager.getSubjects();
+    const subName = subjects[paused.subjectId]?.name || 'Quiz';
+    const m = Math.floor(Math.max(0, paused.sessionTimer) / 60);
+    const s = Math.floor(Math.max(0, paused.sessionTimer) % 60);
+    const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+
+    if (info) {
+      info.textContent = `Sujet : ${subName} • Score : ${paused.score || 0} Pts • Chrono restant : ${timeStr}`;
+    }
+    container.style.display = 'block';
+  }
+
+  pauseQuizSession() {
+    clearInterval(this.timerInterval);
+    const modal = document.getElementById('modal-quiz-pause');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+    }
+  }
+
+  saveAndExitQuizSession() {
+    clearInterval(this.timerInterval);
+    const session = this.quizEngine.currentSession;
+    if (session) {
+      StorageManager.savePausedSession(session);
+    }
+    this.closePauseModal();
+    this.quizEngine.currentSession = null;
+    this.switchView('subjects-view');
+  }
+
+  resumeQuizSession() {
+    const paused = StorageManager.getPausedSession() || this.quizEngine.currentSession;
+    if (!paused) return;
+
+    StorageManager.clearPausedSession();
+    this.closePauseModal();
+
+    const nextQ = this.quizEngine.resumeSession(paused);
+    const subjects = StorageManager.getSubjects();
+    const sub = subjects[paused.subjectId];
+    if (sub) {
+      const badge = document.getElementById('quiz-subject-badge');
+      if (badge) badge.textContent = sub.name;
+    }
+
+    this.switchView('quiz-view');
+    this.renderCurrentQuestion(nextQ);
+    this.startTimer();
+  }
+
+  abandonQuizSession() {
+    clearInterval(this.timerInterval);
+    this.quizEngine.currentSession = null;
+    StorageManager.clearPausedSession();
+    this.closePauseModal();
+    this.switchView('subjects-view');
+  }
+
+  discardPausedSession() {
+    StorageManager.clearPausedSession();
+    this.updatePausedBanner();
+  }
+
+  closePauseModal() {
+    const modal = document.getElementById('modal-quiz-pause');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+    }
+  }
+
+  closeOverwriteModal() {
+    const modal = document.getElementById('modal-confirm-overwrite');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+    }
+  }
+
+  startQuiz(subjectId, mode = 'classic', force = false) {
+    const paused = StorageManager.getPausedSession();
+    if (paused && !force) {
+      this.pendingNewQuiz = { subjectId, mode };
+      const modal = document.getElementById('modal-confirm-overwrite');
+      if (modal) {
+        modal.style.display = 'flex';
+        modal.style.visibility = 'visible';
+      }
+      return;
+    }
+
+    if (force) {
+      StorageManager.clearPausedSession();
+      this.updatePausedBanner();
+    }
+
     const subjects = StorageManager.getSubjects();
     const sub = subjects[subjectId];
     if (!sub || !sub.questions || sub.questions.length === 0) {
@@ -415,7 +527,9 @@ class AppController {
       sessionTimerSeconds: 180 // 3 minutes = 180 seconds
     });
 
-    document.getElementById('quiz-subject-badge').textContent = sub.name;
+    const badge = document.getElementById('quiz-subject-badge');
+    if (badge) badge.textContent = sub.name;
+
     this.switchView('quiz-view');
     this.renderCurrentQuestion(firstQuestion);
     this.startTimer();
@@ -864,7 +978,27 @@ class AppController {
     reader.readAsText(file, 'UTF-8');
   }
 
-  setupEventListeners() {
+    // Quiz Pause & Resume Buttons
+    const safeOn = (id, event, fn) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener(event, fn);
+    };
+
+    safeOn('btn-quiz-pause', 'click', () => this.pauseQuizSession());
+    safeOn('btn-pause-resume', 'click', () => this.resumeQuizSession());
+    safeOn('btn-pause-save-exit', 'click', () => this.saveAndExitQuizSession());
+    safeOn('btn-pause-abandon', 'click', () => this.abandonQuizSession());
+    safeOn('btn-resume-banner', 'click', () => this.resumeQuizSession());
+    safeOn('btn-discard-banner', 'click', () => this.discardPausedSession());
+    safeOn('btn-confirm-cancel', 'click', () => this.closeOverwriteModal());
+    safeOn('btn-confirm-overwrite', 'click', () => {
+      this.closeOverwriteModal();
+      if (this.pendingNewQuiz) {
+        this.startQuiz(this.pendingNewQuiz.subjectId, this.pendingNewQuiz.mode, true);
+        this.pendingNewQuiz = null;
+      }
+    });
+
     // Cloud Account Modal Trigger Button
     const btnOpenCloudModal = document.getElementById('btn-open-cloud-modal');
     if (btnOpenCloudModal) {
