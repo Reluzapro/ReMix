@@ -10161,6 +10161,8 @@ class StorageManager {
     }
     if (cloudData.paused_session) {
       localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+    } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
+      localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
     }
     return true;
   }
@@ -10219,7 +10221,11 @@ class StorageManager {
         if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
       }
       if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
-      if (cloudData.paused_session) localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+      if (cloudData.paused_session) {
+        localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+      } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
+        localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+      }
       return { success: true, isNew: false, profile };
     }
 
@@ -10310,9 +10316,13 @@ class StorageManager {
   static savePausedSession(sessionData) {
     if (!sessionData) {
       localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+      const profile = this.getProfile();
+      profile.pausedSessionClearedAt = Date.now();
+      this.saveProfile(profile);
       this.autoSyncCloud();
       return;
     }
+    sessionData.savedAt = Date.now();
     localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(sessionData));
     this.autoSyncCloud();
   }
@@ -10329,6 +10339,9 @@ class StorageManager {
 
   static clearPausedSession() {
     localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+    const profile = this.getProfile();
+    profile.pausedSessionClearedAt = Date.now();
+    this.saveProfile(profile);
     this.autoSyncCloud();
   }
 
