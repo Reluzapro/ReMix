@@ -11844,21 +11844,8 @@ class AppController {
     const expBox = document.getElementById('quiz-explanation-box');
     const expText = document.getElementById('quiz-explanation-text');
     if (expBox && expText) {
-      if (!result.wasCorrect) {
-        let msg = `❌ <strong>Réponse incorrecte (-5 pts)</strong><br>`;
-        msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
-        if (result.explanation) {
-          msg += `<br><br>💡 <em>${result.explanation}</em>`;
-        }
-        msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra 20 questions plus tard !</span>`;
-
-        expText.innerHTML = msg;
-        expBox.style.setProperty('display', 'block', 'important');
-        expBox.style.setProperty('visibility', 'visible', 'important');
-        expBox.style.setProperty('opacity', '1', 'important');
-        this.triggerMathJax();
-      } else if (result.explanation) {
-        expText.innerHTML = `💡 <em>${result.explanation}</em>`;
+      if (result.explanation && result.explanation.trim()) {
+        expText.innerHTML = result.explanation;
         expBox.style.setProperty('display', 'block', 'important');
         expBox.style.setProperty('visibility', 'visible', 'important');
         expBox.style.setProperty('opacity', '1', 'important');
