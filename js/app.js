@@ -462,6 +462,7 @@ class AppController {
   closeOverwriteModal() {
     const modal = document.getElementById('modal-confirm-overwrite');
     if (modal) {
+      modal.classList.remove('active');
       modal.style.display = 'none';
       modal.style.visibility = 'hidden';
     }
@@ -473,6 +474,7 @@ class AppController {
       this.pendingNewQuiz = { subjectId, mode };
       const modal = document.getElementById('modal-confirm-overwrite');
       if (modal) {
+        modal.classList.add('active');
         modal.style.display = 'flex';
         modal.style.visibility = 'visible';
       }
