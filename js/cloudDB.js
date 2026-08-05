@@ -137,19 +137,32 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
     if (cloudRecord) {
       finalProfile = mergeProfileData(profile, cloudRecord.profile_data);
       finalSubjects = mergeSubjectsData(subjectsData, cloudRecord.subjects_data);
-      // Keep cloud paused session if local doesn't have one and cloud has one updated recently
-      if (!finalPausedSession && cloudRecord.paused_session) {
-        finalPausedSession = cloudRecord.paused_session;
+
+      const cloudSession = cloudRecord.srs_data?.pausedSession || cloudRecord.paused_session;
+      const localSavedAt = pausedSession?.savedAt || 0;
+      const cloudSavedAt = cloudSession?.savedAt || 0;
+      const localClearedAt = profile.pausedSessionClearedAt || 0;
+
+      if (pausedSession && localSavedAt >= cloudSavedAt) {
+        finalPausedSession = pausedSession;
+      } else if (cloudSession && cloudSavedAt > localSavedAt && cloudSavedAt > localClearedAt) {
+        finalPausedSession = cloudSession;
+      } else {
+        finalPausedSession = null;
       }
     }
 
+    // Embed pausedSession inside srs_data JSONB so it works 100% with standard Supabase profiles table without needing DDL migrations
     await db.from('profiles').upsert({
       username: username.toLowerCase(),
       hashed_key: hashedKey,
       profile_data: finalProfile,
-      srs_data: { srs: srsData, revisionItems: revisionItems },
+      srs_data: {
+        srs: srsData,
+        revisionItems: revisionItems,
+        pausedSession: finalPausedSession
+      },
       subjects_data: finalSubjects,
-      paused_session: finalPausedSession,
       updated_at: Date.now()
     }, { onConflict: 'username,hashed_key' });
   } catch (e) {
@@ -168,6 +181,11 @@ export async function fetchProfileFromCloud(username, hashedKey) {
       .eq('hashed_key', hashedKey)
       .maybeSingle();
     if (error) throw error;
+    if (data) {
+      if (!data.paused_session && data.srs_data?.pausedSession) {
+        data.paused_session = data.srs_data.pausedSession;
+      }
+    }
     return data;
   } catch (e) {
     console.log('Profile cloud fetch failed:', e.message);
