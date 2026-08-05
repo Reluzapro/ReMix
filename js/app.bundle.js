@@ -11708,13 +11708,14 @@ class AppController {
       question.shuffledOptions.forEach(opt => {
         const card = document.createElement('div');
         card.className = 'option-card';
+        card.setAttribute('data-option', opt);
         if (question.disabledOptions.includes(opt)) {
           card.classList.add('disabled');
         }
 
         card.innerHTML = `<span>${opt}</span><span class="opt-check"></span>`;
         card.addEventListener('click', () => {
-          if (card.classList.contains('disabled') || card.classList.contains('selected')) return;
+          if (card.classList.contains('disabled') || card.classList.contains('selected') || card.classList.contains('answered')) return;
           this.handleAnswerSelection(card, opt);
         });
 
@@ -11727,23 +11728,31 @@ class AppController {
   }
 
   handleAnswerSelection(selectedCard, selectedOption) {
+    // Lock all options immediately so no second click or 2nd attempt is possible
+    const allCards = document.querySelectorAll('.option-card');
+    allCards.forEach(c => {
+      c.classList.add('answered');
+      c.style.pointerEvents = 'none';
+    });
+
     const result = this.quizEngine.submitAnswer(selectedOption);
 
-    const allCards = document.querySelectorAll('.option-card');
-    allCards.forEach(c => c.style.pointerEvents = 'none');
-
     if (result.wasCorrect) {
-      selectedCard.classList.add('correct');
-      selectedCard.querySelector('.opt-check').textContent = '✓';
+      if (selectedCard) {
+        selectedCard.classList.add('correct');
+        const checkEl = selectedCard.querySelector('.opt-check');
+        if (checkEl) checkEl.textContent = '✓';
+      }
     } else {
       if (selectedCard) {
         selectedCard.classList.add('wrong');
-        selectedCard.querySelector('.opt-check').textContent = '✗';
+        const checkEl = selectedCard.querySelector('.opt-check');
+        if (checkEl) checkEl.textContent = '✗';
       }
 
+      // Highlight exact correct answer in green
       allCards.forEach(c => {
-        const text = c.querySelector('span')?.textContent || c.textContent;
-        if (text.includes(result.correctAnswer) || c.innerHTML.includes(result.correctAnswer)) {
+        if (c.getAttribute('data-option') === result.correctAnswer) {
           c.classList.add('correct');
           const checkEl = c.querySelector('.opt-check');
           if (checkEl) checkEl.textContent = '✓';
@@ -11751,7 +11760,7 @@ class AppController {
       });
     }
 
-    // Update live score badge in header
+    // Update live score badge immediately (-5 pts applied, min 0)
     const scoreBadge = document.getElementById('quiz-score-badge');
     if (scoreBadge) scoreBadge.textContent = `${this.quizEngine.currentSession?.score || 0} Pts`;
 
@@ -11776,6 +11785,7 @@ class AppController {
       } else if (currentQ.explanation) {
         expText.innerHTML = `💡 <em>${currentQ.explanation}</em>`;
         expBox.style.display = 'block';
+        this.triggerMathJax();
       }
     }
 
