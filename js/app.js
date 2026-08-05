@@ -972,6 +972,7 @@ class AppController {
         resultBox.innerHTML = `
           <h4 style="color: var(--accent-red);">❌ Erreur d'importation</h4>
           <p>${res.error}</p>
+        `;
       }
     };
     reader.readAsText(file, 'UTF-8');
