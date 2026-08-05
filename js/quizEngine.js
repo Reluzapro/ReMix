@@ -230,7 +230,7 @@ export class QuizEngine {
     const totalAnswered = correct + this.currentSession.wrongCount + this.currentSession.skippedCount;
     const accuracy = totalAnswered > 0 ? Math.round((correct / totalAnswered) * 100) : 0;
 
-    const xpEarned = Math.round(this.currentSession.score * 1.2) + (accuracy === 100 ? 50 : 0);
+    const xpEarned = Math.max(0, Math.floor(this.currentSession.score / 4));
     const coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
 
     const profile = StorageManager.getProfile();
