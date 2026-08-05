@@ -514,9 +514,11 @@ class AppController {
     const container = document.getElementById('quiz-question-container');
     const optionsContainer = document.getElementById('quiz-options-container');
     const nextBtn = document.getElementById('quiz-next-btn');
+    const saveExitBtn = document.getElementById('quiz-save-exit-btn');
     const expBox = document.getElementById('quiz-explanation-box');
 
     if (nextBtn) nextBtn.style.display = 'none';
+    if (saveExitBtn) saveExitBtn.style.display = 'none';
     if (expBox) expBox.style.display = 'none';
 
     const counter = document.getElementById('quiz-counter');
@@ -582,6 +584,10 @@ class AppController {
       });
     }
 
+    // Update live score badge in header
+    const scoreBadge = document.getElementById('quiz-score-badge');
+    if (scoreBadge) scoreBadge.textContent = `${this.quizEngine.currentSession?.score || 0} Pts`;
+
     this.updateHeaderStats();
 
     const currentQ = this.quizEngine.currentSession?.questions[this.quizEngine.currentSession.currentIndex - 1];
@@ -590,7 +596,7 @@ class AppController {
       const expText = document.getElementById('quiz-explanation-text');
 
       if (!result.wasCorrect) {
-        let msg = `❌ <strong>Réponse incorrecte (-10 pts)</strong><br>`;
+        let msg = `❌ <strong>Réponse incorrecte (-5 pts)</strong><br>`;
         msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
         if (currentQ.explanation) {
           msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
@@ -605,6 +611,9 @@ class AppController {
         expBox.style.display = 'block';
       }
     }
+
+    const saveExitBtn = document.getElementById('quiz-save-exit-btn');
+    if (saveExitBtn) saveExitBtn.style.display = 'inline-block';
 
     const nextBtn = document.getElementById('quiz-next-btn');
     if (nextBtn) {
