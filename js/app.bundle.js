@@ -10951,7 +10951,12 @@ class QuizEngine {
       return mA - mB;
     });
 
-    const prepared = sortedQuestions.map(q => this.prepareQuestion(q));
+    let finalQuestions = sortedQuestions;
+    if (mode === 'classic') {
+      finalQuestions = sortedQuestions.slice(0, 10);
+    }
+
+    const prepared = finalQuestions.map(q => this.prepareQuestion(q));
 
     this.currentSession = {
       subjectId: subjectId,
@@ -10995,12 +11000,16 @@ class QuizEngine {
 
     // Loop/extend pool if questions run low before 3-minute timer ends
     if (this.currentSession.currentIndex >= this.currentSession.questions.length) {
-      const pool = this.currentSession.originalQuestions || [];
-      if (pool.length > 0) {
-        const extra = [...pool].sort(() => Math.random() - 0.5).map(q => this.prepareQuestion(q));
-        this.currentSession.questions.push(...extra);
+      if (this.currentSession.mode === 'infinite') {
+        const pool = this.currentSession.originalQuestions || [];
+        if (pool.length > 0) {
+          const extra = [...pool].sort(() => Math.random() - 0.5).map(q => this.prepareQuestion(q));
+          this.currentSession.questions.push(...extra);
+        } else {
+          return null;
+        }
       } else {
-        return null;
+        return null; // End of questions for non-infinite modes
       }
     }
 
