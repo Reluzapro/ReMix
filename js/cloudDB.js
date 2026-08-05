@@ -62,10 +62,34 @@ export function mergeProfileData(localProfile, cloudProfile) {
 
   const merged = { ...cloudProfile, ...localProfile };
 
-  // Maximize XP, Level, Coins so no hard-earned progress is lost across devices
+  // Track total coins earned and spent so buying an item or earning coins on one device
+  // is mathematically exact without double-spending or resetting coins.
+  const lEarned = localProfile.totalCoinsEarned ?? localProfile.coins ?? 50;
+  const cEarned = cloudProfile.totalCoinsEarned ?? cloudProfile.coins ?? 50;
+  const lSpent = localProfile.totalCoinsSpent ?? 0;
+  const cSpent = cloudProfile.totalCoinsSpent ?? 0;
+
+  merged.totalCoinsEarned = Math.max(lEarned, cEarned);
+  merged.totalCoinsSpent = Math.max(lSpent, cSpent);
+  merged.coins = Math.max(0, merged.totalCoinsEarned - merged.totalCoinsSpent);
+
+  // Maximize XP, Level
   merged.xp = Math.max(localProfile.xp || 0, cloudProfile.xp || 0);
   merged.level = Math.max(localProfile.level || 1, cloudProfile.level || 1);
-  merged.coins = Math.max(localProfile.coins || 0, cloudProfile.coins || 0);
+
+  // Merge Purchased Items (Themes & Avatars)
+  const lPurchased = localProfile.purchasedItems || [];
+  const cPurchased = cloudProfile.purchasedItems || [];
+  merged.purchasedItems = Array.from(new Set([...cPurchased, ...lPurchased]));
+
+  // Merge Inventory (Power-ups: take max of each powerup count)
+  const lInv = localProfile.inventory || {};
+  const cInv = cloudProfile.inventory || {};
+  merged.inventory = {
+    powerup_fifty: Math.max(lInv.powerup_fifty || 0, cInv.powerup_fifty || 0),
+    powerup_time: Math.max(lInv.powerup_time || 0, cInv.powerup_time || 0),
+    powerup_skip: Math.max(lInv.powerup_skip || 0, cInv.powerup_skip || 0)
+  };
 
   // Merge Stats
   const lStats = localProfile.stats || {};

@@ -60,8 +60,10 @@ export class GamificationEngine {
   }
 
   static addReward(profile, points, xpEarned, coinsEarned) {
+    profile.totalCoinsEarned = (profile.totalCoinsEarned ?? profile.coins ?? 50) + coinsEarned;
+    profile.totalCoinsSpent = profile.totalCoinsSpent ?? 0;
+    profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     profile.xp += xpEarned;
-    profile.coins += coinsEarned;
 
     let reqXP = this.getRequiredXP(profile.level);
     let leveledUp = false;
@@ -69,7 +71,8 @@ export class GamificationEngine {
     while (profile.xp >= reqXP) {
       profile.xp -= reqXP;
       profile.level += 1;
-      profile.coins += 50;
+      profile.totalCoinsEarned += 50;
+      profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
       reqXP = this.getRequiredXP(profile.level);
       leveledUp = true;
     }
@@ -98,28 +101,26 @@ export class GamificationEngine {
 
   static checkAchievements(profile) {
     const newlyUnlocked = [];
-    const unlocked = new Set(profile.unlockedAchievements || []);
-
     ACHIEVEMENTS.forEach(ach => {
-      if (unlocked.has(ach.id)) return;
+      if (profile.unlockedAchievements.includes(ach.id)) return;
 
       let conditionMet = false;
       if (ach.id === 'ach_first' && profile.stats.gamesPlayed >= 1) conditionMet = true;
-      if (ach.id === 'ach_streak_5' && (profile.maxStreak >= 5 || profile.streak >= 5)) conditionMet = true;
-      if (ach.id === 'ach_streak_10' && (profile.maxStreak >= 10 || profile.streak >= 10)) conditionMet = true;
-      if (ach.id === 'ach_level_5' && profile.level >= 5) conditionMet = true;
-      if (ach.id === 'ach_coins_500' && profile.coins >= 500) conditionMet = true;
       if (ach.id === 'ach_perfect' && profile.stats.perfectGames >= 1) conditionMet = true;
+      if (ach.id === 'ach_streak_5' && profile.maxStreak >= 5) conditionMet = true;
+      if (ach.id === 'ach_streak_10' && profile.maxStreak >= 10) conditionMet = true;
+      if (ach.id === 'ach_level_5' && profile.level >= 5) conditionMet = true;
+      if (ach.id === 'ach_coins_500' && (profile.totalCoinsEarned || profile.coins) >= 500) conditionMet = true;
       if (ach.id === 'ach_shop_buy' && profile.purchasedItems.length > 2) conditionMet = true;
 
       if (conditionMet) {
-        unlocked.add(ach.id);
+        profile.unlockedAchievements.push(ach.id);
         newlyUnlocked.push(ach);
       }
     });
 
     if (newlyUnlocked.length > 0) {
-      profile.unlockedAchievements = Array.from(unlocked);
+      SoundFX.playAchievement();
       StorageManager.saveProfile(profile);
     }
 
@@ -128,9 +129,9 @@ export class GamificationEngine {
 
   static buyItem(profile, itemId) {
     const item = SHOP_ITEMS.find(i => i.id === itemId);
-    if (!item) return { success: false, message: 'Élément introuvable.' };
+    if (!item) return { success: false, message: 'Article introuvable.' };
 
-    if (profile.purchasedItems.includes(itemId)) {
+    if (profile.purchasedItems.includes(itemId) && (item.type === 'theme' || item.type === 'avatar')) {
       if (item.type === 'theme') {
         profile.theme = itemId;
         StorageManager.saveProfile(profile);
@@ -146,7 +147,9 @@ export class GamificationEngine {
       return { success: false, message: 'Pièces insuffisantes !' };
     }
 
-    profile.coins -= item.cost;
+    profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + item.cost;
+    profile.totalCoinsEarned = profile.totalCoinsEarned ?? (profile.coins + profile.totalCoinsSpent);
+    profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     SoundFX.playPurchase();
 
     if (item.type === 'theme') {
@@ -172,7 +175,9 @@ export class GamificationEngine {
       return { success: false, message: 'Pas assez de pièces pour débloquer cette vraie récompense !' };
     }
 
-    profile.coins -= reward.cost;
+    profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + reward.cost;
+    profile.totalCoinsEarned = profile.totalCoinsEarned ?? (profile.coins + profile.totalCoinsSpent);
+    profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     reward.redeemedCount = (reward.redeemedCount || 0) + 1;
     SoundFX.playPurchase();
 

@@ -9737,10 +9737,34 @@ function mergeProfileData(localProfile, cloudProfile) {
 
   const merged = { ...cloudProfile, ...localProfile };
 
-  // Maximize XP, Level, Coins so no hard-earned progress is lost across devices
+  // Track total coins earned and spent so buying an item or earning coins on one device
+  // is mathematically exact without double-spending or resetting coins.
+  const lEarned = localProfile.totalCoinsEarned ?? localProfile.coins ?? 50;
+  const cEarned = cloudProfile.totalCoinsEarned ?? cloudProfile.coins ?? 50;
+  const lSpent = localProfile.totalCoinsSpent ?? 0;
+  const cSpent = cloudProfile.totalCoinsSpent ?? 0;
+
+  merged.totalCoinsEarned = Math.max(lEarned, cEarned);
+  merged.totalCoinsSpent = Math.max(lSpent, cSpent);
+  merged.coins = Math.max(0, merged.totalCoinsEarned - merged.totalCoinsSpent);
+
+  // Maximize XP, Level
   merged.xp = Math.max(localProfile.xp || 0, cloudProfile.xp || 0);
   merged.level = Math.max(localProfile.level || 1, cloudProfile.level || 1);
-  merged.coins = Math.max(localProfile.coins || 0, cloudProfile.coins || 0);
+
+  // Merge Purchased Items (Themes & Avatars)
+  const lPurchased = localProfile.purchasedItems || [];
+  const cPurchased = cloudProfile.purchasedItems || [];
+  merged.purchasedItems = Array.from(new Set([...cPurchased, ...lPurchased]));
+
+  // Merge Inventory (Power-ups: take max of each powerup count)
+  const lInv = localProfile.inventory || {};
+  const cInv = cloudProfile.inventory || {};
+  merged.inventory = {
+    powerup_fifty: Math.max(lInv.powerup_fifty || 0, cInv.powerup_fifty || 0),
+    powerup_time: Math.max(lInv.powerup_time || 0, cInv.powerup_time || 0),
+    powerup_skip: Math.max(lInv.powerup_skip || 0, cInv.powerup_skip || 0)
+  };
 
   // Merge Stats
   const lStats = localProfile.stats || {};
@@ -10738,8 +10762,10 @@ class GamificationEngine {
   }
 
   static addReward(profile, points, xpEarned, coinsEarned) {
+    profile.totalCoinsEarned = (profile.totalCoinsEarned ?? profile.coins ?? 50) + coinsEarned;
+    profile.totalCoinsSpent = profile.totalCoinsSpent ?? 0;
+    profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     profile.xp += xpEarned;
-    profile.coins += coinsEarned;
 
     let reqXP = this.getRequiredXP(profile.level);
     let leveledUp = false;
@@ -10747,7 +10773,8 @@ class GamificationEngine {
     while (profile.xp >= reqXP) {
       profile.xp -= reqXP;
       profile.level += 1;
-      profile.coins += 50;
+      profile.totalCoinsEarned += 50;
+      profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
       reqXP = this.getRequiredXP(profile.level);
       leveledUp = true;
     }
@@ -10776,28 +10803,26 @@ class GamificationEngine {
 
   static checkAchievements(profile) {
     const newlyUnlocked = [];
-    const unlocked = new Set(profile.unlockedAchievements || []);
-
     ACHIEVEMENTS.forEach(ach => {
-      if (unlocked.has(ach.id)) return;
+      if (profile.unlockedAchievements.includes(ach.id)) return;
 
       let conditionMet = false;
       if (ach.id === 'ach_first' && profile.stats.gamesPlayed >= 1) conditionMet = true;
-      if (ach.id === 'ach_streak_5' && (profile.maxStreak >= 5 || profile.streak >= 5)) conditionMet = true;
-      if (ach.id === 'ach_streak_10' && (profile.maxStreak >= 10 || profile.streak >= 10)) conditionMet = true;
-      if (ach.id === 'ach_level_5' && profile.level >= 5) conditionMet = true;
-      if (ach.id === 'ach_coins_500' && profile.coins >= 500) conditionMet = true;
       if (ach.id === 'ach_perfect' && profile.stats.perfectGames >= 1) conditionMet = true;
+      if (ach.id === 'ach_streak_5' && profile.maxStreak >= 5) conditionMet = true;
+      if (ach.id === 'ach_streak_10' && profile.maxStreak >= 10) conditionMet = true;
+      if (ach.id === 'ach_level_5' && profile.level >= 5) conditionMet = true;
+      if (ach.id === 'ach_coins_500' && (profile.totalCoinsEarned || profile.coins) >= 500) conditionMet = true;
       if (ach.id === 'ach_shop_buy' && profile.purchasedItems.length > 2) conditionMet = true;
 
       if (conditionMet) {
-        unlocked.add(ach.id);
+        profile.unlockedAchievements.push(ach.id);
         newlyUnlocked.push(ach);
       }
     });
 
     if (newlyUnlocked.length > 0) {
-      profile.unlockedAchievements = Array.from(unlocked);
+      SoundFX.playAchievement();
       StorageManager.saveProfile(profile);
     }
 
@@ -10806,9 +10831,9 @@ class GamificationEngine {
 
   static buyItem(profile, itemId) {
     const item = SHOP_ITEMS.find(i => i.id === itemId);
-    if (!item) return { success: false, message: 'Élément introuvable.' };
+    if (!item) return { success: false, message: 'Article introuvable.' };
 
-    if (profile.purchasedItems.includes(itemId)) {
+    if (profile.purchasedItems.includes(itemId) && (item.type === 'theme' || item.type === 'avatar')) {
       if (item.type === 'theme') {
         profile.theme = itemId;
         StorageManager.saveProfile(profile);
@@ -10824,7 +10849,9 @@ class GamificationEngine {
       return { success: false, message: 'Pièces insuffisantes !' };
     }
 
-    profile.coins -= item.cost;
+    profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + item.cost;
+    profile.totalCoinsEarned = profile.totalCoinsEarned ?? (profile.coins + profile.totalCoinsSpent);
+    profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     SoundFX.playPurchase();
 
     if (item.type === 'theme') {
@@ -10850,7 +10877,9 @@ class GamificationEngine {
       return { success: false, message: 'Pas assez de pièces pour débloquer cette vraie récompense !' };
     }
 
-    profile.coins -= reward.cost;
+    profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + reward.cost;
+    profile.totalCoinsEarned = profile.totalCoinsEarned ?? (profile.coins + profile.totalCoinsSpent);
+    profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     reward.redeemedCount = (reward.redeemedCount || 0) + 1;
     SoundFX.playPurchase();
 
