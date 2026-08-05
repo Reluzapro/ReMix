@@ -11378,6 +11378,18 @@ class AppController {
     this.setupCSVImporter();
     this.setupEventListeners();
     this.setupProfileAdminTrigger();
+
+    // Periodic 30-second silent background cloud sync heartbeat
+    setInterval(async () => {
+      const updated = await StorageManager.syncFromCloudSilent();
+      if (updated) {
+        this.updateHeaderStats();
+        this.updatePausedBanner();
+        if (document.getElementById('subjects-view')?.classList.contains('active')) {
+          this.renderSubjects();
+        }
+      }
+    }, 30000);
   }
 
   setupProfileAdminTrigger() {
