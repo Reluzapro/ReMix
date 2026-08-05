@@ -178,9 +178,8 @@ export class QuizEngine {
       const toRemove = wrongOpts.sort(() => Math.random() - 0.5).slice(0, 2);
       this.currentSession.disabledOptions = toRemove;
     } else if (powerupType === 'powerup_time') {
-      this.currentSession.currentTimer += 15;
-      if (this.currentSession.globalTimer !== null) {
-        this.currentSession.globalTimer += 15;
+      if (this.currentSession.sessionTimer !== undefined) {
+        this.currentSession.sessionTimer += 15;
       }
     } else if (powerupType === 'powerup_double') {
       this.currentSession.powerupDoubleActive = true;

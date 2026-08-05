@@ -10875,9 +10875,8 @@ class QuizEngine {
       const toRemove = wrongOpts.sort(() => Math.random() - 0.5).slice(0, 2);
       this.currentSession.disabledOptions = toRemove;
     } else if (powerupType === 'powerup_time') {
-      this.currentSession.currentTimer += 15;
-      if (this.currentSession.globalTimer !== null) {
-        this.currentSession.globalTimer += 15;
+      if (this.currentSession.sessionTimer !== undefined) {
+        this.currentSession.sessionTimer += 15;
       }
     } else if (powerupType === 'powerup_double') {
       this.currentSession.powerupDoubleActive = true;
@@ -11562,11 +11561,11 @@ class AppController {
     const nextBtn = document.getElementById('quiz-next-btn');
     const expBox = document.getElementById('quiz-explanation-box');
 
-    nextBtn.style.display = 'none';
-    expBox.style.display = 'none';
+    if (nextBtn) nextBtn.style.display = 'none';
+    if (expBox) expBox.style.display = 'none';
 
     const counter = document.getElementById('quiz-counter');
-    if (counter) counter.textContent = `Question ${question.currentIndex + 1}/${question.totalQuestions}`;
+    if (counter) counter.textContent = `Question ${question.currentIndex + 1}`;
     
     const session = this.quizEngine.currentSession;
     const sessionTimeLeft = session ? session.sessionTimer : 180;
@@ -11575,34 +11574,31 @@ class AppController {
     if (progressBar) progressBar.style.width = `${fillPercent}%`;
 
     const scoreBadge = document.getElementById('quiz-score-badge');
-    if (scoreBadge) scoreBadge.textContent = `${this.quizEngine.currentSession?.score || 0} Pts`;
+    if (scoreBadge) scoreBadge.textContent = `${session?.score || 0} Pts`;
 
-    container.innerHTML = `
-      <div class="question-card">
-        <h3 class="question-title">${question.question}</h3>
-      </div>
-    `;
+    const questionTextEl = document.getElementById('quiz-question-text');
+    if (questionTextEl) questionTextEl.innerHTML = question.question;
 
-    optionsContainer.innerHTML = '';
+    if (optionsContainer) {
+      optionsContainer.innerHTML = '';
+      question.shuffledOptions.forEach(opt => {
+        const card = document.createElement('div');
+        card.className = 'option-card';
+        if (question.disabledOptions.includes(opt)) {
+          card.classList.add('disabled');
+        }
+
+        card.innerHTML = `<span>${opt}</span><span class="opt-check"></span>`;
+        card.addEventListener('click', () => {
+          if (card.classList.contains('disabled') || card.classList.contains('selected')) return;
+          this.handleAnswerSelection(card, opt);
+        });
+
+        optionsContainer.appendChild(card);
+      });
+    }
 
     this.updatePowerupButtons();
-
-    question.shuffledOptions.forEach(opt => {
-      const card = document.createElement('div');
-      card.className = 'option-card';
-      if (question.disabledOptions.includes(opt)) {
-        card.classList.add('disabled');
-      }
-
-      card.innerHTML = `<span>${opt}</span><span class="opt-check"></span>`;
-      card.addEventListener('click', () => {
-        if (card.classList.contains('disabled') || card.classList.contains('selected')) return;
-        this.handleAnswerSelection(card, opt);
-      });
-
-      optionsContainer.appendChild(card);
-    });
-
     this.triggerMathJax();
   }
 
@@ -11657,15 +11653,6 @@ class AppController {
     }
 
     const nextBtn = document.getElementById('quiz-next-btn');
-    nextBtn.style.display = 'inline-block';
-
-    nextBtn.onclick = () => {
-      if (result.isFinished) {
-        this.showResults(result.summary);
-      } else {
-        this.renderCurrentQuestion(result.nextQuestion);
-        this.startTimer();
-      }
     };
 
     this.triggerMathJax();
