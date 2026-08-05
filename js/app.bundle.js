@@ -11648,14 +11648,20 @@ class AppController {
       } else if (currentQ.explanation) {
         expText.innerHTML = `💡 <em>${currentQ.explanation}</em>`;
         expBox.style.display = 'block';
-        this.triggerMathJax();
       }
     }
 
     const nextBtn = document.getElementById('quiz-next-btn');
-    };
-
-    this.triggerMathJax();
+    if (nextBtn) {
+      nextBtn.style.display = 'inline-block';
+      nextBtn.onclick = () => {
+        if (result.isFinished) {
+          this.showResults(result.summary);
+        } else {
+          this.renderCurrentQuestion(result.nextQuestion);
+        }
+      };
+    }
   }
 
   startFlashcardMode(subjectId = null) {
