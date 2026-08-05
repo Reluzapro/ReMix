@@ -995,6 +995,20 @@ class AppController {
   }
 
   setupEventListeners() {
+    // Auto-sync when switching back to this tab/app on phone or PC
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        const updated = await StorageManager.syncFromCloudSilent();
+        if (updated) {
+          this.updateHeaderStats();
+          this.updatePausedBanner();
+          if (document.getElementById('subjects-view')?.classList.contains('active')) {
+            this.renderSubjects();
+          }
+        }
+      }
+    });
+
     // Quiz Pause & Resume Buttons
     const safeOn = (id, event, fn) => {
       const el = document.getElementById(id);

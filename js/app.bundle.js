@@ -9729,19 +9729,78 @@ async function fetchCloudLeaderboard() {
   }
 }
 
-// --- PROFILE SYNC (multi-device account) ---
+// --- PROFILE SYNC (multi-device account with Smart Merge Conflict Protection) ---
+
+function mergeProfileData(localProfile, cloudProfile) {
+  if (!cloudProfile) return localProfile;
+  if (!localProfile) return cloudProfile;
+
+  const merged = { ...cloudProfile, ...localProfile };
+
+  // Maximize XP, Level, Coins so no hard-earned progress is lost across devices
+  merged.xp = Math.max(localProfile.xp || 0, cloudProfile.xp || 0);
+  merged.level = Math.max(localProfile.level || 1, cloudProfile.level || 1);
+  merged.coins = Math.max(localProfile.coins || 0, cloudProfile.coins || 0);
+
+  // Merge Stats
+  const lStats = localProfile.stats || {};
+  const cStats = cloudProfile.stats || {};
+  merged.stats = {
+    gamesPlayed: Math.max(lStats.gamesPlayed || 0, cStats.gamesPlayed || 0),
+    correctAnswers: Math.max(lStats.correctAnswers || 0, cStats.correctAnswers || 0),
+    wrongAnswers: Math.max(lStats.wrongAnswers || 0, cStats.wrongAnswers || 0),
+    skippedAnswers: Math.max(lStats.skippedAnswers || 0, cStats.skippedAnswers || 0),
+    perfectGames: Math.max(lStats.perfectGames || 0, cStats.perfectGames || 0),
+    duelWins: Math.max(lStats.duelWins || 0, cStats.duelWins || 0)
+  };
+
+  // Union of Custom Rewards (keep rewards added on both PC and Phone)
+  const lRewards = localProfile.customRewards || [];
+  const cRewards = cloudProfile.customRewards || [];
+  const rewardMap = new Map();
+  [...cRewards, ...lRewards].forEach(r => rewardMap.set(r.id, r));
+  merged.customRewards = Array.from(rewardMap.values());
+
+  return merged;
+}
+
+function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}) {
+  return { ...cloudSubjects, ...localSubjects };
+}
 
 async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData, pausedSession = null, revisionItems = []) {
   try {
     const db = getDB();
     if (!db) return;
+
+    // Fetch cloud state first to safely merge before overwriting
+    const { data: cloudRecord } = await db
+      .from('profiles')
+      .select('*')
+      .eq('username', username.toLowerCase())
+      .eq('hashed_key', hashedKey)
+      .maybeSingle();
+
+    let finalProfile = profile;
+    let finalSubjects = subjectsData;
+    let finalPausedSession = pausedSession;
+
+    if (cloudRecord) {
+      finalProfile = mergeProfileData(profile, cloudRecord.profile_data);
+      finalSubjects = mergeSubjectsData(subjectsData, cloudRecord.subjects_data);
+      // Keep cloud paused session if local doesn't have one and cloud has one updated recently
+      if (!finalPausedSession && cloudRecord.paused_session) {
+        finalPausedSession = cloudRecord.paused_session;
+      }
+    }
+
     await db.from('profiles').upsert({
       username: username.toLowerCase(),
       hashed_key: hashedKey,
-      profile_data: profile,
+      profile_data: finalProfile,
       srs_data: { srs: srsData, revisionItems: revisionItems },
-      subjects_data: subjectsData,
-      paused_session: pausedSession,
+      subjects_data: finalSubjects,
+      paused_session: finalPausedSession,
       updated_at: Date.now()
     }, { onConflict: 'username,hashed_key' });
   } catch (e) {
@@ -10039,11 +10098,31 @@ class StorageManager {
     } catch (e) { return { ...DEFAULT_SETTINGS }; }
   }
 
-  static saveSettings(settings) {
-    try { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch (e) {}
+  static async syncFromCloudSilent() {
+    const profile = this.getProfile();
+    if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return false;
+    const { username, hashedKey } = profile.cloudAccount;
+    const cloudData = await fetchProfileFromCloud(username, hashedKey);
+    if (!cloudData) return false;
+
+    if (cloudData.profile_data) {
+      const mergedProf = mergeProfileData(profile, cloudData.profile_data);
+      localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProf));
+    }
+    if (cloudData.srs_data) {
+      if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
+      if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+    }
+    if (cloudData.subjects_data) {
+      const mergedSubs = mergeSubjectsData(this.getSubjects(), cloudData.subjects_data);
+      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
+    }
+    if (cloudData.paused_session) {
+      localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+    }
+    return true;
   }
 
-  /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   static async autoSyncCloud() {
     const profile = this.getProfile();
@@ -12235,6 +12314,20 @@ class AppController {
   }
 
   setupEventListeners() {
+    // Auto-sync when switching back to this tab/app on phone or PC
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        const updated = await StorageManager.syncFromCloudSilent();
+        if (updated) {
+          this.updateHeaderStats();
+          this.updatePausedBanner();
+          if (document.getElementById('subjects-view')?.classList.contains('active')) {
+            this.renderSubjects();
+          }
+        }
+      }
+    });
+
     // Quiz Pause & Resume Buttons
     const safeOn = (id, event, fn) => {
       const el = document.getElementById(id);

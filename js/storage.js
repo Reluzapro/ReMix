@@ -1,6 +1,6 @@
 // Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Supabase Cloud Database sync, and Anti-Cheat Checksum auto-purge
 import { DEFAULT_SUBJECTS } from './questionsData.js';
-import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud } from './cloudDB.js';
+import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData } from './cloudDB.js';
 
 const STORAGE_KEYS = {
   SUBJECTS: 'rev_game_subjects_v6',
@@ -268,11 +268,31 @@ export class StorageManager {
     } catch (e) { return { ...DEFAULT_SETTINGS }; }
   }
 
-  static saveSettings(settings) {
-    try { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch (e) {}
+  static async syncFromCloudSilent() {
+    const profile = this.getProfile();
+    if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return false;
+    const { username, hashedKey } = profile.cloudAccount;
+    const cloudData = await fetchProfileFromCloud(username, hashedKey);
+    if (!cloudData) return false;
+
+    if (cloudData.profile_data) {
+      const mergedProf = mergeProfileData(profile, cloudData.profile_data);
+      localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProf));
+    }
+    if (cloudData.srs_data) {
+      if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
+      if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+    }
+    if (cloudData.subjects_data) {
+      const mergedSubs = mergeSubjectsData(this.getSubjects(), cloudData.subjects_data);
+      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
+    }
+    if (cloudData.paused_session) {
+      localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+    }
+    return true;
   }
 
-  /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   static async autoSyncCloud() {
     const profile = this.getProfile();
