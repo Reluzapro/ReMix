@@ -10902,9 +10902,9 @@ class QuizEngine {
 
     clearInterval(this.timerInterval);
 
-    const total = this.currentSession.questions.length;
     const correct = this.currentSession.correctCount;
-    const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
+    const totalAnswered = correct + this.currentSession.wrongCount + this.currentSession.skippedCount;
+    const accuracy = totalAnswered > 0 ? Math.round((correct / totalAnswered) * 100) : 0;
 
     const xpEarned = Math.round(this.currentSession.score * 1.2) + (accuracy === 100 ? 50 : 0);
     const coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
