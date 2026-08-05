@@ -11225,8 +11225,6 @@ const DUEL_EMOJIS = [
   { id: 'thinking', emoji: '🤔', label: 'Réflexion' }
 ];
 
-export { DUEL_EMOJIS };
-
 class MultiplayerEngine {
   constructor() {
     this.channel = null;
