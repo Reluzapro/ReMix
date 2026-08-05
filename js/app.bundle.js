@@ -9748,9 +9748,11 @@ function mergeProfileData(localProfile, cloudProfile) {
   merged.totalCoinsSpent = Math.max(lSpent, cSpent);
   merged.coins = Math.max(0, merged.totalCoinsEarned - merged.totalCoinsSpent);
 
-  // Maximize XP, Level
+  // Maximize XP, Level, and Streaks
   merged.xp = Math.max(localProfile.xp || 0, cloudProfile.xp || 0);
   merged.level = Math.max(localProfile.level || 1, cloudProfile.level || 1);
+  merged.streak = Math.max(localProfile.streak || 0, cloudProfile.streak || 0);
+  merged.maxStreak = Math.max(localProfile.maxStreak || 0, cloudProfile.maxStreak || 0);
 
   // Merge Purchased Items (Themes & Avatars)
   const lPurchased = localProfile.purchasedItems || [];
