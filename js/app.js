@@ -425,22 +425,12 @@ class AppController {
     container.style.display = 'block';
   }
 
-  pauseQuizSession() {
-    clearInterval(this.timerInterval);
-    const modal = document.getElementById('modal-quiz-pause');
-    if (modal) {
-      modal.style.display = 'flex';
-      modal.style.visibility = 'visible';
-    }
-  }
-
   saveAndExitQuizSession() {
     clearInterval(this.timerInterval);
     const session = this.quizEngine.currentSession;
     if (session) {
       StorageManager.savePausedSession(session);
     }
-    this.closePauseModal();
     this.quizEngine.currentSession = null;
     this.switchView('subjects-view');
   }
@@ -450,9 +440,8 @@ class AppController {
     if (!paused) return;
 
     StorageManager.clearPausedSession();
-    this.closePauseModal();
 
-    const nextQ = this.quizEngine.resumeSession(paused);
+    const currentQ = this.quizEngine.resumeSession(paused);
     const subjects = StorageManager.getSubjects();
     const sub = subjects[paused.subjectId];
     if (sub) {
@@ -461,29 +450,13 @@ class AppController {
     }
 
     this.switchView('quiz-view');
-    this.renderCurrentQuestion(nextQ);
+    this.renderCurrentQuestion(currentQ);
     this.startTimer();
-  }
-
-  abandonQuizSession() {
-    clearInterval(this.timerInterval);
-    this.quizEngine.currentSession = null;
-    StorageManager.clearPausedSession();
-    this.closePauseModal();
-    this.switchView('subjects-view');
   }
 
   discardPausedSession() {
     StorageManager.clearPausedSession();
     this.updatePausedBanner();
-  }
-
-  closePauseModal() {
-    const modal = document.getElementById('modal-quiz-pause');
-    if (modal) {
-      modal.style.display = 'none';
-      modal.style.visibility = 'hidden';
-    }
   }
 
   closeOverwriteModal() {
@@ -985,10 +958,7 @@ class AppController {
       if (el) el.addEventListener(event, fn);
     };
 
-    safeOn('btn-quiz-pause', 'click', () => this.pauseQuizSession());
-    safeOn('btn-pause-resume', 'click', () => this.resumeQuizSession());
-    safeOn('btn-pause-save-exit', 'click', () => this.saveAndExitQuizSession());
-    safeOn('btn-pause-abandon', 'click', () => this.abandonQuizSession());
+    safeOn('quiz-save-exit-btn', 'click', () => this.saveAndExitQuizSession());
     safeOn('btn-resume-banner', 'click', () => this.resumeQuizSession());
     safeOn('btn-discard-banner', 'click', () => this.discardPausedSession());
     safeOn('btn-confirm-cancel', 'click', () => this.closeOverwriteModal());

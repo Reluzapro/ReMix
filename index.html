@@ -101,7 +101,7 @@
           </div>
           <div style="display: flex; gap: 0.5rem;">
             <button class="btn btn-primary" id="btn-resume-banner" style="padding: 0.6rem 1.2rem; font-size: 0.95rem;">
-              ▶️ Reprendre (-10s)
+              ▶️ Reprendre la partie
             </button>
             <button class="btn btn-outline" id="btn-discard-banner" style="padding: 0.6rem 0.85rem; font-size: 0.9rem; color: var(--accent-red); border-color: var(--accent-red);" title="Abandonner cette sauvegarde">
               🗑️
@@ -225,14 +225,8 @@
             <span id="quiz-subject-badge" class="level-badge">Matière</span>
             <span id="quiz-counter" style="margin-left: 0.5rem; color: var(--text-secondary);">Question 1</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <div class="timer-box">
-              <span>⏱️</span>
-              <span id="quiz-timer">3:00</span>
-            </div>
-            <button class="btn btn-secondary" id="btn-quiz-pause" title="Mettre la partie en pause" style="padding: 0.5rem 0.85rem; font-size: 0.9rem; border-radius: var(--radius-md); font-weight: 600;">
-              ⏸️ Pause
-            </button>
+          <div class="timer-box">
+            <span id="quiz-timer">⏱️ 3:00</span>
           </div>
         </div>
 
@@ -267,7 +261,8 @@
           <div id="quiz-explanation-text" style="font-size: 0.95rem; color: var(--text-primary); line-height: 1.5; white-space: pre-line;"></div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem;">
+          <button class="btn btn-secondary" id="quiz-save-exit-btn" style="padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 600; border-radius: var(--radius-md);">💾 Sauvegarder & Quitter</button>
           <button class="btn-primary" id="quiz-next-btn" style="display: none;">Suivant ➔</button>
         </div>
       </div>
@@ -507,6 +502,6 @@
     </div>
   </div>
 
-  <script src="js/app.bundle.js?v=20260805_v7"></script>
+  <script src="js/app.bundle.js?v=v8_save_exit_direct"></script>
 </body>
 </html>
