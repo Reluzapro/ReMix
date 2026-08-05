@@ -11478,6 +11478,17 @@ class AppController {
     document.getElementById('header-coins').textContent = profile.coins;
     document.getElementById('header-streak').textContent = profile.streak;
     document.getElementById('header-level').textContent = `Niv. ${profile.level}`;
+
+    const cloudUserEl = document.getElementById('header-cloud-user');
+    if (cloudUserEl) {
+      if (profile.cloudAccount?.username) {
+        cloudUserEl.textContent = profile.cloudAccount.username;
+        cloudUserEl.style.color = '#6ee7b7';
+      } else {
+        cloudUserEl.textContent = 'Connexion';
+        cloudUserEl.style.color = '#fca5a5';
+      }
+    }
   }
 
   setupNavigation() {
@@ -12374,6 +12385,11 @@ class AppController {
       const el = document.getElementById(id);
       if (el) el.addEventListener(event, fn);
     };
+
+    safeOn('header-cloud-btn', 'click', () => {
+      const modal = document.getElementById('modal-cloud-login');
+      if (modal) modal.classList.add('active');
+    });
 
     safeOn('quiz-save-exit-btn', 'click', () => this.saveAndExitQuizSession());
     safeOn('btn-resume-banner', 'click', () => this.resumeQuizSession());
