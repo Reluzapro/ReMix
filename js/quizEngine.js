@@ -52,12 +52,15 @@ export class QuizEngine {
   }
 
   prepareQuestion(questionObj) {
-    const options = [...questionObj.options];
-    const shuffled = options.sort(() => Math.random() - 0.5);
+    if (!questionObj) return null;
+    const rawOptions = questionObj.options || questionObj.shuffledOptions || [];
+    const options = Array.isArray(rawOptions) ? [...rawOptions] : [];
+    const shuffled = options.length > 0 ? options.sort(() => Math.random() - 0.5) : [questionObj.correct || ''];
 
     return {
-      id: questionObj.id,
+      id: questionObj.id || Math.random().toString(36).substring(2, 9),
       question: questionObj.question,
+      options: options,
       correct: questionObj.correct,
       explanation: questionObj.explanation || '',
       shuffledOptions: shuffled
