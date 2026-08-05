@@ -972,12 +972,12 @@ class AppController {
         resultBox.innerHTML = `
           <h4 style="color: var(--accent-red);">❌ Erreur d'importation</h4>
           <p>${res.error}</p>
-        `;
       }
     };
     reader.readAsText(file, 'UTF-8');
   }
 
+  setupEventListeners() {
     // Quiz Pause & Resume Buttons
     const safeOn = (id, event, fn) => {
       const el = document.getElementById(id);
