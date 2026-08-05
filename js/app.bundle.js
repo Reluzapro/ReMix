@@ -11748,27 +11748,53 @@ class AppController {
     if (result.wasCorrect) {
       if (targetCard) {
         targetCard.classList.add('correct');
-        targetCard.style.cssText += '; background-color: rgba(16, 185, 129, 0.35) !important; border: 3px solid #10b981 !important; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important; color: #a7f3d0 !important;';
+        targetCard.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
+        targetCard.style.setProperty('border', '3px solid #10b981', 'important');
+        targetCard.style.setProperty('box-shadow', '0 0 25px rgba(16, 185, 129, 0.7)', 'important');
+        targetCard.style.setProperty('color', '#ffffff', 'important');
         const checkEl = targetCard.querySelector('.opt-check');
         if (checkEl) checkEl.textContent = '✓';
       }
     } else {
       if (targetCard) {
         targetCard.classList.add('wrong');
-        targetCard.style.cssText += '; background-color: rgba(239, 68, 68, 0.45) !important; border: 3px solid #ef4444 !important; box-shadow: 0 0 20px rgba(239, 68, 68, 0.6) !important; color: #fca5a5 !important;';
+        targetCard.style.setProperty('background-color', 'rgba(239, 68, 68, 0.5)', 'important');
+        targetCard.style.setProperty('border', '3px solid #ef4444', 'important');
+        targetCard.style.setProperty('box-shadow', '0 0 25px rgba(239, 68, 68, 0.8)', 'important');
+        targetCard.style.setProperty('color', '#ffffff', 'important');
         const checkEl = targetCard.querySelector('.opt-check');
-        if (checkEl) checkEl.textContent = '✗';
+        if (checkEl) checkEl.textContent = '❌';
+
+        // Append explicit red wrong text inside card
+        if (!targetCard.querySelector('.wrong-tag')) {
+          const tag = document.createElement('div');
+          tag.className = 'wrong-tag';
+          tag.style.cssText = 'color: #fca5a5; font-size: 0.85rem; font-weight: 700; margin-top: 0.35rem;';
+          tag.textContent = '❌ Votre réponse (Incorrecte -5 pts)';
+          targetCard.appendChild(tag);
+        }
       }
 
       // Highlight exact correct answer in vibrant green
       allCards.forEach(c => {
         const optVal = c.getAttribute('data-option');
         const textVal = c.querySelector('span')?.textContent || c.textContent;
-        if (optVal === result.correctAnswer || textVal.trim() === result.correctAnswer.trim()) {
+        if (optVal === result.correctAnswer || textVal.trim().includes(result.correctAnswer.trim()) || result.correctAnswer.trim().includes(textVal.trim())) {
           c.classList.add('correct');
-          c.style.cssText += '; background-color: rgba(16, 185, 129, 0.35) !important; border: 3px solid #10b981 !important; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important; color: #a7f3d0 !important;';
+          c.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
+          c.style.setProperty('border', '3px solid #10b981', 'important');
+          c.style.setProperty('box-shadow', '0 0 25px rgba(16, 185, 129, 0.7)', 'important');
+          c.style.setProperty('color', '#ffffff', 'important');
           const checkEl = c.querySelector('.opt-check');
           if (checkEl) checkEl.textContent = '✓';
+
+          if (!c.querySelector('.correct-tag')) {
+            const tag = document.createElement('div');
+            tag.className = 'correct-tag';
+            tag.style.cssText = 'color: #6ee7b7; font-size: 0.85rem; font-weight: 700; margin-top: 0.35rem;';
+            tag.textContent = '✅ Bonne réponse';
+            c.appendChild(tag);
+          }
         }
       });
     }
@@ -11792,11 +11818,15 @@ class AppController {
         msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra 20 questions plus tard !</span>`;
 
         expText.innerHTML = msg;
-        expBox.style.display = 'block';
+        expBox.style.setProperty('display', 'block', 'important');
+        expBox.style.setProperty('visibility', 'visible', 'important');
+        expBox.style.setProperty('opacity', '1', 'important');
         this.triggerMathJax();
       } else if (result.explanation) {
         expText.innerHTML = `💡 <em>${result.explanation}</em>`;
-        expBox.style.display = 'block';
+        expBox.style.setProperty('display', 'block', 'important');
+        expBox.style.setProperty('visibility', 'visible', 'important');
+        expBox.style.setProperty('opacity', '1', 'important');
         this.triggerMathJax();
       }
     }
