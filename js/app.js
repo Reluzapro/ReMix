@@ -1118,11 +1118,6 @@ class AppController {
       });
     }
 
-    const safeOn = (id, event, fn) => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener(event, fn);
-    };
-
     safeOn('btn-quick-play', 'click', () => {
       const subjects = Object.keys(StorageManager.getSubjects());
       const randomSub = subjects[Math.floor(Math.random() * subjects.length)];
