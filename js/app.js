@@ -593,6 +593,7 @@ class AppController {
       c.style.pointerEvents = 'none';
     });
 
+    clearInterval(this.timerInterval);
     const result = this.quizEngine.submitAnswer(selectedOption);
     const targetCard = (selectedCard && selectedCard.closest) ? selectedCard.closest('.option-card') : selectedCard;
 
@@ -680,6 +681,7 @@ class AppController {
           this.showResults(result.summary);
         } else {
           this.renderCurrentQuestion(result.nextQuestion);
+          this.startTimer();
         }
       };
     }
