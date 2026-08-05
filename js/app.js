@@ -569,38 +569,30 @@ class AppController {
     });
 
     const result = this.quizEngine.submitAnswer(selectedOption);
+    const targetCard = (selectedCard && selectedCard.closest) ? selectedCard.closest('.option-card') : selectedCard;
 
     if (result.wasCorrect) {
-      if (selectedCard) {
-        selectedCard.classList.add('correct');
-        selectedCard.style.backgroundColor = 'rgba(16, 185, 129, 0.35)';
-        selectedCard.style.borderColor = '#10b981';
-        selectedCard.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.4)';
-        selectedCard.style.color = '#a7f3d0';
-        const checkEl = selectedCard.querySelector('.opt-check');
+      if (targetCard) {
+        targetCard.classList.add('correct');
+        targetCard.style.cssText += '; background-color: rgba(16, 185, 129, 0.35) !important; border: 3px solid #10b981 !important; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important; color: #a7f3d0 !important;';
+        const checkEl = targetCard.querySelector('.opt-check');
         if (checkEl) checkEl.textContent = '✓';
       }
     } else {
-      if (selectedCard) {
-        selectedCard.classList.add('wrong');
-        selectedCard.style.backgroundColor = 'rgba(239, 68, 68, 0.4)';
-        selectedCard.style.borderColor = '#ef4444';
-        selectedCard.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.5)';
-        selectedCard.style.color = '#fca5a5';
-        const checkEl = selectedCard.querySelector('.opt-check');
+      if (targetCard) {
+        targetCard.classList.add('wrong');
+        targetCard.style.cssText += '; background-color: rgba(239, 68, 68, 0.45) !important; border: 3px solid #ef4444 !important; box-shadow: 0 0 20px rgba(239, 68, 68, 0.6) !important; color: #fca5a5 !important;';
+        const checkEl = targetCard.querySelector('.opt-check');
         if (checkEl) checkEl.textContent = '✗';
       }
 
-      // Highlight exact correct answer in green
+      // Highlight exact correct answer in vibrant green
       allCards.forEach(c => {
         const optVal = c.getAttribute('data-option');
         const textVal = c.querySelector('span')?.textContent || c.textContent;
         if (optVal === result.correctAnswer || textVal.trim() === result.correctAnswer.trim()) {
           c.classList.add('correct');
-          c.style.backgroundColor = 'rgba(16, 185, 129, 0.35)';
-          c.style.borderColor = '#10b981';
-          c.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.4)';
-          c.style.color = '#a7f3d0';
+          c.style.cssText += '; background-color: rgba(16, 185, 129, 0.35) !important; border: 3px solid #10b981 !important; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important; color: #a7f3d0 !important;';
           const checkEl = c.querySelector('.opt-check');
           if (checkEl) checkEl.textContent = '✓';
         }
@@ -613,24 +605,23 @@ class AppController {
 
     this.updateHeaderStats();
 
-    const currentQ = this.quizEngine.currentSession?.questions[this.quizEngine.currentSession.currentIndex - 1];
-    if (currentQ) {
-      const expBox = document.getElementById('quiz-explanation-box');
-      const expText = document.getElementById('quiz-explanation-text');
-
+    // Render explanation box reliably using result object
+    const expBox = document.getElementById('quiz-explanation-box');
+    const expText = document.getElementById('quiz-explanation-text');
+    if (expBox && expText) {
       if (!result.wasCorrect) {
         let msg = `❌ <strong>Réponse incorrecte (-5 pts)</strong><br>`;
         msg += `✅ La bonne réponse était : <strong>${result.correctAnswer}</strong>`;
-        if (currentQ.explanation) {
-          msg += `<br><br>💡 <em>${currentQ.explanation}</em>`;
+        if (result.explanation) {
+          msg += `<br><br>💡 <em>${result.explanation}</em>`;
         }
         msg += `<br><br><span style="color: var(--accent-cyan); font-weight: 600;">🔄 Cette carte réapparaîtra 20 questions plus tard !</span>`;
 
         expText.innerHTML = msg;
         expBox.style.display = 'block';
         this.triggerMathJax();
-      } else if (currentQ.explanation) {
-        expText.innerHTML = `💡 <em>${currentQ.explanation}</em>`;
+      } else if (result.explanation) {
+        expText.innerHTML = `💡 <em>${result.explanation}</em>`;
         expBox.style.display = 'block';
         this.triggerMathJax();
       }

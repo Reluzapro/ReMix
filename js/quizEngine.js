@@ -154,11 +154,18 @@ export class QuizEngine {
         nextQuestion: null,
         wasCorrect: isCorrect,
         correctAnswer: currentQ.correct,
+        explanation: currentQ.explanation || '',
         summary: this.finishSession()
       };
     }
 
-    return { isFinished: false, nextQuestion: nextQ, wasCorrect: isCorrect, correctAnswer: currentQ.correct };
+    return {
+      isFinished: false,
+      nextQuestion: nextQ,
+      wasCorrect: isCorrect,
+      correctAnswer: currentQ.correct,
+      explanation: currentQ.explanation || ''
+    };
   }
 
   usePowerup(powerupType) {
