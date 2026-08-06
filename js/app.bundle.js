@@ -11767,6 +11767,9 @@ class AppController {
   }
 
   setupNavigation() {
+    if (this._navSetup) return;
+    this._navSetup = true;
+
     const navBtns = document.querySelectorAll('.nav-btn');
     navBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -13096,6 +13099,9 @@ class AppController {
   }
 
   setupEventListeners() {
+    if (this._eventListenersSetup) return;
+    this._eventListenersSetup = true;
+
     // Auto-sync when switching back to this tab/app on phone or PC
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState === 'visible') {
