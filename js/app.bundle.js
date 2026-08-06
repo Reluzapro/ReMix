@@ -12222,10 +12222,22 @@ class AppController {
     if (counter) counter.textContent = `Question ${question.currentIndex + 1}`;
     
     const session = this.quizEngine.currentSession;
-    const sessionTimeLeft = session ? session.sessionTimer : 180;
-    const fillPercent = Math.min(100, Math.max(0, (sessionTimeLeft / 180) * 100));
-    const progressBar = document.getElementById('quiz-progress-fill') || document.getElementById('quiz-progress-bar');
-    if (progressBar) progressBar.style.width = `${fillPercent}%`;
+    
+    // Hide timer elements if in revision mode
+    const timerBox = document.querySelector('.timer-box');
+    const progBarContainer = document.querySelector('.quiz-progress-bar');
+    if (session && session.mode === 'revision') {
+      if (timerBox) timerBox.style.display = 'none';
+      if (progBarContainer) progBarContainer.style.display = 'none';
+    } else {
+      if (timerBox) timerBox.style.display = 'flex';
+      if (progBarContainer) progBarContainer.style.display = 'block';
+      
+      const sessionTimeLeft = session ? session.sessionTimer : 180;
+      const fillPercent = Math.min(100, Math.max(0, (sessionTimeLeft / 180) * 100));
+      const progressBar = document.getElementById('quiz-progress-fill') || document.getElementById('quiz-progress-bar');
+      if (progressBar) progressBar.style.width = `${fillPercent}%`;
+    }
 
     const scoreBadge = document.getElementById('quiz-score-badge');
     if (scoreBadge) scoreBadge.textContent = `${session?.score || 0} Pts`;
@@ -12952,6 +12964,9 @@ class AppController {
     clearInterval(this.timerInterval);
     const session = this.quizEngine.currentSession;
     if (!session) return;
+    
+    // Do not start timer in revision mode
+    if (session.mode === 'revision') return;
 
     const timerEl = document.getElementById('quiz-timer');
 
