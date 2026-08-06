@@ -105,11 +105,20 @@ export function mergeProfileData(localProfile, cloudProfile) {
     duelWins: Math.max(lStats.duelWins || 0, cStats.duelWins || 0)
   };
 
-  // Union of Custom Rewards (keep rewards added on both PC and Phone)
+  // Union of Custom Rewards, minus deleted ones (CRDT tombstones)
   const lRewards = localProfile.customRewards || [];
   const cRewards = cloudProfile.customRewards || [];
+  const lDeleted = localProfile.deletedCustomRewards || [];
+  const cDeleted = cloudProfile.deletedCustomRewards || [];
+  
+  merged.deletedCustomRewards = Array.from(new Set([...lDeleted, ...cDeleted]));
+  
   const rewardMap = new Map();
-  [...cRewards, ...lRewards].forEach(r => rewardMap.set(r.id, r));
+  [...cRewards, ...lRewards].forEach(r => {
+    if (!merged.deletedCustomRewards.includes(r.id)) {
+      rewardMap.set(r.id, r);
+    }
+  });
   merged.customRewards = Array.from(rewardMap.values());
 
   // Union of Unlocked Achievements

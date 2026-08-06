@@ -1449,6 +1449,10 @@ class AppController {
         const rew = profile.customRewards.find(r => r.id === id);
         if (rew && confirm(`Supprimer la récompense "${rew.title}" ?`)) {
           profile.customRewards = profile.customRewards.filter(r => r.id !== id);
+          profile.deletedCustomRewards = profile.deletedCustomRewards || [];
+          if (!profile.deletedCustomRewards.includes(id)) {
+            profile.deletedCustomRewards.push(id);
+          }
           StorageManager.saveProfile(profile);
           this.renderShop();
         }
