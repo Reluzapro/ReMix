@@ -28,7 +28,7 @@ export const SHOP_ITEMS = [
   { id: 'theme-lava', type: 'theme', title: 'Volcanic Lava', desc: 'Magma bouillonnant rouge intense', cost: 5000, icon: '🌋' },
   { id: 'theme-synthwave', type: 'theme', title: 'Outrun 80s', desc: 'Magenta et orange rétro', cost: 6000, icon: '📼' },
   { id: 'theme-cotton-candy', type: 'theme', title: 'Cotton Candy', desc: 'Rose et bleu ciel sucré', cost: 7000, icon: '🍭' },
-  { id: 'theme-abyss', type: 'theme', title: 'Void Abyss', desc: 'Le noir absolu de l\\'espace', cost: 10000, icon: '🌌' },
+  { id: 'theme-abyss', type: 'theme', title: 'Void Abyss', desc: "Le noir absolu de l'espace", cost: 10000, icon: '🌌' },
 
   // Avatars
   { id: 'avatar-student', type: 'avatar', title: 'Étudiant Assidu', desc: 'Avatar classique de révision', cost: 0, icon: '🎓' },
@@ -36,7 +36,7 @@ export const SHOP_ITEMS = [
   { id: 'avatar-robot', type: 'avatar', title: 'IA Réductrice', desc: 'Avatar futuriste', cost: 400, icon: '🤖' },
   { id: 'avatar-ninja', type: 'avatar', title: 'Ninja de la Thermo', desc: 'Rapide et précis', cost: 500, icon: '🥷' },
   { id: 'avatar-king', type: 'avatar', title: 'Roi des Examens', desc: 'Couronne de la réussite', cost: 800, icon: '👑' },
-  { id: 'avatar-alien', type: 'avatar', title: 'Cerveau Galactique', desc: 'Venu d\\'ailleurs', cost: 1200, icon: '👽' },
+  { id: 'avatar-alien', type: 'avatar', title: 'Cerveau Galactique', desc: "Venu d'ailleurs", cost: 1200, icon: '👽' },
   { id: 'avatar-knight', type: 'avatar', title: 'Chevalier Noir', desc: 'Armure impénétrable', cost: 1500, icon: '🛡️' },
   { id: 'avatar-dragon', type: 'avatar', title: 'Dragon', desc: 'Force mythologique', cost: 2000, icon: '🐉' },
   { id: 'avatar-astronaut', type: 'avatar', title: 'Astronaute', desc: 'Au-delà des étoiles', cost: 2500, icon: '👨‍🚀' },
@@ -46,7 +46,7 @@ export const SHOP_ITEMS = [
   { id: 'avatar-superhero', type: 'avatar', title: 'Super-Héros', desc: 'Sauveur des notes', cost: 4500, icon: '🦸‍♂️' },
   { id: 'avatar-ghost', type: 'avatar', title: 'Fantôme', desc: 'Invisible pendant le contrôle', cost: 5000, icon: '👻' },
   { id: 'avatar-einstein', type: 'avatar', title: 'Einstein', desc: 'Génie absolu', cost: 7500, icon: '🧠' },
-  { id: 'avatar-god', type: 'avatar', title: 'Dieu de la Révision', desc: 'L\\'omniscience pure', cost: 10000, icon: '👁️' },
+  { id: 'avatar-god', type: 'avatar', title: 'Dieu de la Révision', desc: "L'omniscience pure", cost: 10000, icon: '👁️' },
 
   // Emojis de Duel
   { id: 'emoji-fire', type: 'emoji', title: 'Enflammé', desc: 'Emoji de duel', cost: 0, icon: '🔥' },
