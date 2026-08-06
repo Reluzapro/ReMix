@@ -13129,9 +13129,7 @@ class AppController {
       profile.customRewards.forEach(rew => {
         const card = document.createElement('div');
         card.className = 'shop-card';
-        const iconHtml = rew.image 
-          ? `<img src="${rew.image}" alt="${rew.title}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 12px; margin-bottom: 0.5rem; border: 2px solid var(--border-color);">`
-          : `<div class="shop-icon">🎁</div>`;
+        const iconHtml = `<div class="shop-icon">🎁</div>`;
 
         card.innerHTML = `
           ${iconHtml}
@@ -13733,7 +13731,7 @@ class AppController {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_SIZE = 300;
+            const MAX_SIZE = 800;
             let width = img.width;
             let height = img.height;
 
@@ -13755,7 +13753,7 @@ class AppController {
             ctx.drawImage(img, 0, 0, width, height);
 
             // Compress to WebP or JPEG
-            const dataUrl = canvas.toDataURL('image/webp', 0.8);
+            const dataUrl = canvas.toDataURL('image/webp', 0.9);
             currentCompressedImage = dataUrl;
 
             if (imgPreviewDiv && imgPreviewTag) {
