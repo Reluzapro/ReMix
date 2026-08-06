@@ -11274,13 +11274,15 @@ class MultiplayerEngine {
     return data;
   }
 
-  static async findMatchmakingBattle(subjectId, myUsername) {
+  static async findMatchmakingBattle(subjectId, wager, myUsername) {
     const db = this._getDB();
     if (!db) return null;
     const { data, error } = await db.from('battles')
       .select('*')
       .eq('status', 'waiting')
       .eq('is_public', true)
+      .eq('subject_id', subjectId)
+      .eq('wager', wager)
       .is('player2_id', null)
       .neq('player1_id', myUsername)
       .order('created_at', { ascending: true })
@@ -11355,6 +11357,10 @@ class MultiplayerEngine {
     await db.from('battles').update({ status: 'finished' }).eq('id', battleId);
   }
 
+  static async cancelMatchmaking(battleId) {
+    return this.deleteBattle(battleId);
+  }
+
   // --- Supabase Realtime Channel ---
   static subscribeToBattle(battleId, callbacks) {
     const db = this._getDB();
@@ -11386,6 +11392,10 @@ class MultiplayerEngine {
 
     channel.on('broadcast', { event: 'emote' }, (payload) => {
       if (callbacks.onEmote) callbacks.onEmote(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'player_finished' }, (payload) => {
+      if (callbacks.onPlayerFinished) callbacks.onPlayerFinished(payload.payload);
     });
 
     channel.on('broadcast', { event: 'battle_finished' }, (payload) => {
@@ -11457,12 +11467,12 @@ class MultiplayerEngine {
     return { success: true, battle: updated };
   }
 
-  static async startMatchmaking(subjectData) {
+  static async startMatchmaking(subjectData, wager = 0) {
     const profile = StorageManager.getProfile();
     const myUsername = profile.cloudAccount?.username || profile.name;
 
     // Search for an existing public room
-    const existing = await this.findMatchmakingBattle(subjectData.id, myUsername);
+    const existing = await this.findMatchmakingBattle(subjectData.id, wager, myUsername);
 
     if (existing) {
       // Join the existing room
@@ -11495,7 +11505,7 @@ class MultiplayerEngine {
       code,
       subjectId: subjectData.id,
       subjectName: subjectData.name,
-      wager: 0,
+      wager: wager,
       isPublic: true,
       player1Id: myUsername,
       player1Name: profile.name,
@@ -12379,8 +12389,19 @@ class AppController {
       onEmote: (data) => {
         this.displayReceivedEmote(data.emoji);
       },
+      onPlayerFinished: (data) => {
+        if (!this.duelState) return;
+        this.duelState.oppFinished = true;
+        this.duelState.oppScore = Math.max(this.duelState.oppScore, data.finalScore || 0);
+        
+        // If we are ALSO finished, resolve the duel now
+        if (this.quizEngine.currentSession && this.quizEngine.currentSession.isFinished && !this.duelState.resolved) {
+          this.resolveDuelAndShowResults();
+        }
+      },
       onBattleFinished: (data) => {
-        this.endDuel();
+        if (!this.duelState || this.duelState.resolved) return;
+        this.resolveDuelAndShowResults();
       }
     });
 
@@ -12391,6 +12412,8 @@ class AppController {
       battle,
       myScore: 0,
       oppScore: 0,
+      oppFinished: false,
+      resolved: false,
       questionIndex: 0,
       questions: battle.questions_data || []
     };
@@ -12599,7 +12622,7 @@ class AppController {
     }, 2000);
   }
 
-  async endDuel() {
+  async endDuel(isTimeUp = false) {
     if (!this.duelState) return;
     clearInterval(this.timerInterval);
 
@@ -12612,6 +12635,32 @@ class AppController {
     await MultiplayerEngine.finishBattle(this.duelState.battleId);
 
     // Broadcast finished
+    MultiplayerEngine.broadcastEvent(this.duelState.channel, 'player_finished', {
+      playerNum: this.duelState.playerNum,
+      finalScore: this.duelState.myScore
+    });
+
+    if (!this.duelState.oppFinished && !isTimeUp) {
+      this.switchView('duels-view');
+      this.showDuelScreen('matchmaking');
+      document.getElementById('matchmaking-status-text').textContent = 'En attente de l\'adversaire...';
+      return;
+    }
+
+    this.resolveDuelAndShowResults();
+  }
+
+  async resolveDuelAndShowResults() {
+    if (!this.duelState || this.duelState.resolved) return;
+    this.duelState.resolved = true;
+
+    // Fetch latest from DB to catch any missed updates (e.g. disconnects)
+    const finalBattle = await MultiplayerEngine.getBattle(this.duelState.battleId);
+    if (finalBattle) {
+      const oppField = this.duelState.playerNum === 1 ? 'player2_score' : 'player1_score';
+      this.duelState.oppScore = Math.max(this.duelState.oppScore, finalBattle[oppField] || 0);
+    }
+
     MultiplayerEngine.broadcastEvent(this.duelState.channel, 'battle_finished', {
       player1_score: this.duelState.playerNum === 1 ? this.duelState.myScore : this.duelState.oppScore,
       player2_score: this.duelState.playerNum === 2 ? this.duelState.myScore : this.duelState.oppScore
@@ -12825,7 +12874,7 @@ class AppController {
         if (session.sessionTimer <= 0) {
           clearInterval(this.timerInterval);
           if (this.duelState) {
-            this.endDuel();
+            this.endDuel(true);
           } else {
             this.showResults(this.quizEngine.finishSession());
           }
@@ -13175,11 +13224,19 @@ class AppController {
         return;
       }
 
+      const wagerToggle = document.getElementById('duel-wager-toggle');
+      const wager = wagerToggle?.checked ? parseInt(document.getElementById('duel-wager-select').value, 10) : 0;
+
+      if (wager > 0 && profile.coins < wager) {
+        alert(`Pièces insuffisantes pour ce pari ! (${profile.coins} 🪙 dispo, ${wager} 🪙 requis)`);
+        return;
+      }
+
       // Show matchmaking screen
       this.showDuelScreen('matchmaking');
       document.getElementById('matchmaking-status-text').textContent = `Recherche sur : ${sub.name}`;
 
-      const res = await MultiplayerEngine.startMatchmaking(sub);
+      const res = await MultiplayerEngine.startMatchmaking(sub, wager);
       if (!res.success) {
         alert(res.message);
         this.showDuelScreen('menu');

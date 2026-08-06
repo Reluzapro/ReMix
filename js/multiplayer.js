@@ -65,13 +65,15 @@ export class MultiplayerEngine {
     return data;
   }
 
-  static async findMatchmakingBattle(subjectId, myUsername) {
+  static async findMatchmakingBattle(subjectId, wager, myUsername) {
     const db = this._getDB();
     if (!db) return null;
     const { data, error } = await db.from('battles')
       .select('*')
       .eq('status', 'waiting')
       .eq('is_public', true)
+      .eq('subject_id', subjectId)
+      .eq('wager', wager)
       .is('player2_id', null)
       .neq('player1_id', myUsername)
       .order('created_at', { ascending: true })
@@ -146,6 +148,10 @@ export class MultiplayerEngine {
     await db.from('battles').update({ status: 'finished' }).eq('id', battleId);
   }
 
+  static async cancelMatchmaking(battleId) {
+    return this.deleteBattle(battleId);
+  }
+
   // --- Supabase Realtime Channel ---
   static subscribeToBattle(battleId, callbacks) {
     const db = this._getDB();
@@ -177,6 +183,10 @@ export class MultiplayerEngine {
 
     channel.on('broadcast', { event: 'emote' }, (payload) => {
       if (callbacks.onEmote) callbacks.onEmote(payload.payload);
+    });
+
+    channel.on('broadcast', { event: 'player_finished' }, (payload) => {
+      if (callbacks.onPlayerFinished) callbacks.onPlayerFinished(payload.payload);
     });
 
     channel.on('broadcast', { event: 'battle_finished' }, (payload) => {
@@ -248,12 +258,12 @@ export class MultiplayerEngine {
     return { success: true, battle: updated };
   }
 
-  static async startMatchmaking(subjectData) {
+  static async startMatchmaking(subjectData, wager = 0) {
     const profile = StorageManager.getProfile();
     const myUsername = profile.cloudAccount?.username || profile.name;
 
     // Search for an existing public room
-    const existing = await this.findMatchmakingBattle(subjectData.id, myUsername);
+    const existing = await this.findMatchmakingBattle(subjectData.id, wager, myUsername);
 
     if (existing) {
       // Join the existing room
@@ -286,7 +296,7 @@ export class MultiplayerEngine {
       code,
       subjectId: subjectData.id,
       subjectName: subjectData.name,
-      wager: 0,
+      wager: wager,
       isPublic: true,
       player1Id: myUsername,
       player1Name: profile.name,
