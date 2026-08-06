@@ -156,6 +156,34 @@ class SoundSynthesizer {
     });
   }
 
+  playAchievement() {
+    if (!this.isSoundEnabled()) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const vol = this.getVolume();
+    const notes = [523.25, 698.46, 880.00, 1046.50]; // C5, F5, A5, C6
+
+    notes.forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+
+      gain.gain.setValueAtTime(0, now + i * 0.12);
+      gain.gain.linearRampToValueAtTime(0.25 * vol, now + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.3);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.35);
+    });
+  }
+
   playPurchase() {
     if (!this.isSoundEnabled()) return;
     this.init();
