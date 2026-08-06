@@ -276,7 +276,8 @@ export class StorageManager {
     if (!cloudData) return false;
 
     if (cloudData.profile_data) {
-      const mergedProf = mergeProfileData(profile, cloudData.profile_data);
+      const currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
+      const mergedProf = mergeProfileData(currentProfile, cloudData.profile_data);
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProf));
     }
     if (cloudData.srs_data) {
@@ -284,7 +285,8 @@ export class StorageManager {
       if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
     }
     if (cloudData.subjects_data) {
-      const mergedSubs = mergeSubjectsData(this.getSubjects(), cloudData.subjects_data);
+      const currentSubjects = this.getSubjects();
+      const mergedSubs = mergeSubjectsData(currentSubjects, cloudData.subjects_data);
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
     }
     if (cloudData.paused_session) {
