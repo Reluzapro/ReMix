@@ -91,9 +91,11 @@ class AppController {
 
     if (choice === "1") {
       profile.coins += 1000;
+      profile.totalCoinsEarned = (profile.totalCoinsEarned || profile.coins) + 1000;
       alert("✅ +1 000 Pièces ajoutées !");
     } else if (choice === "2") {
       profile.coins += 50000;
+      profile.totalCoinsEarned = (profile.totalCoinsEarned || profile.coins) + 50000;
       alert("🚀 +50 000 Pièces ajoutées au compte !");
     } else if (choice === "3") {
       profile.level = 99;
@@ -108,7 +110,8 @@ class AppController {
       alert("🎨 Tous les objets de la boutique ont été débloqués gratuitement !");
     } else if (choice !== null) {
       profile.coins += 1000;
-      alert("✅ +1 000 Pièces ajoutées par défaut !");
+      profile.totalCoinsEarned = (profile.totalCoinsEarned || profile.coins) + 1000;
+      alert("✅ +1 000 Pièces ajoutées (par défaut) !");
     }
 
     StorageManager.saveProfile(profile);
@@ -782,6 +785,14 @@ class AppController {
         if (this.quizEngine.currentSession && this.quizEngine.currentSession.isFinished && !this.duelState.resolved) {
           this.resolveDuelAndShowResults();
         }
+      },
+      onPlayerLeftLobby: (data) => {
+        if (!this.duelState || this.duelState.started) return;
+        alert("L'adversaire s'est déconnecté du salon.");
+        MultiplayerEngine.cancelMatchmaking(this.duelState.battleId);
+        this.duelState.channel.unsubscribe();
+        this.duelState = null;
+        this.showDuelScreen('menu');
       },
       onBattleFinished: (data) => {
         if (!this.duelState || this.duelState.resolved) return;
@@ -1656,6 +1667,19 @@ class AppController {
       this.showDuelScreen('menu');
     });
 
+    // Leave Lobby
+    safeOn('btn-duel-leave-lobby', 'click', async () => {
+      if (this.duelState && !this.duelState.started && this.duelState.channel) {
+        MultiplayerEngine.broadcastEvent(this.duelState.channel, 'player_left_lobby', {
+          playerNum: this.duelState.playerNum
+        });
+        await MultiplayerEngine.cancelMatchmaking(this.duelState.battleId);
+        this.duelState.channel.unsubscribe();
+        this.duelState = null;
+        this.showDuelScreen('menu');
+      }
+    });
+
     // Create Private Room
     safeOn('btn-create-duel', 'click', async () => {
       const profile = StorageManager.getProfile();
@@ -1854,7 +1878,16 @@ class AppController {
 
 function startApp() {
   const app = new AppController();
+  window.appInstance = app;
   app.init();
+
+  window.addEventListener('beforeunload', () => {
+    if (window.appInstance?.duelState && !window.appInstance.duelState.started && window.appInstance.duelState.channel) {
+      MultiplayerEngine.broadcastEvent(window.appInstance.duelState.channel, 'player_left_lobby', {
+        playerNum: window.appInstance.duelState.playerNum
+      });
+    }
+  });
 
   const safeOn = (id, event, fn) => {
     const el = document.getElementById(id);

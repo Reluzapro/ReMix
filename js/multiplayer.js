@@ -189,6 +189,10 @@ export class MultiplayerEngine {
       if (callbacks.onPlayerFinished) callbacks.onPlayerFinished(payload.payload);
     });
 
+    channel.on('broadcast', { event: 'player_left_lobby' }, (payload) => {
+      if (callbacks.onPlayerLeftLobby) callbacks.onPlayerLeftLobby(payload.payload);
+    });
+
     channel.on('broadcast', { event: 'battle_finished' }, (payload) => {
       if (callbacks.onBattleFinished) callbacks.onBattleFinished(payload.payload);
     });
