@@ -1387,6 +1387,20 @@ class AppController {
   renderShop() {
     const profile = StorageManager.getProfile();
 
+    // Deduplicate customRewards by id (fix corrupted profiles from the double-init bug)
+    if (profile.customRewards && profile.customRewards.length > 0) {
+      const seen = new Set();
+      const deduped = profile.customRewards.filter(r => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+      if (deduped.length !== profile.customRewards.length) {
+        profile.customRewards = deduped;
+        StorageManager.saveProfile(profile);
+      }
+    }
+
     const customContainer = document.getElementById('custom-rewards-container');
     customContainer.innerHTML = '';
 
@@ -1975,6 +1989,10 @@ class AppController {
 }
 
 function startApp() {
+  // CRITICAL GUARD: never run twice (readyState race condition)
+  if (window._appStarted) return;
+  window._appStarted = true;
+
   const app = new AppController();
   window.appInstance = app;
   app.init();
@@ -2042,7 +2060,7 @@ function startApp() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startApp);
+  document.addEventListener('DOMContentLoaded', startApp, { once: true });
 } else {
   startApp();
 }
