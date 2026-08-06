@@ -11769,10 +11769,11 @@ class AppController {
   setupNavigation() {
     const navBtns = document.querySelectorAll('.nav-btn');
     navBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetViewId = btn.getAttribute('data-target');
-        this.switchView(targetViewId);
-
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget.getAttribute('data-target');
+        if (target) {
+          this.switchView(target);
+        }
         navBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         SoundFX.playClick();
@@ -11801,7 +11802,10 @@ class AppController {
     if (viewId === 'duels-view') this.renderDuelsView();
     if (viewId === 'shop-view') this.renderShop();
     if (viewId === 'profile-view') this.renderProfile();
-    if (viewId === 'flashcard-view') this.startFlashcardMode();
+    if (viewId === 'revision-view') {
+      const items = StorageManager.getRevisionItems();
+      document.getElementById('revision-count').textContent = items.length;
+    }
 
     this.triggerMathJax();
   }
@@ -11879,7 +11883,12 @@ class AppController {
       }
 
       if (!matchesCurrentPath) return;
-
+    const btnStartRev = document.getElementById('btn-start-revision');
+    if (btnStartRev) {
+      btnStartRev.addEventListener('click', () => {
+        this.startRevisionQuiz();
+      });
+    }
       if (pathParts.length > currentDepth + 1) {
         const folderName = pathParts[currentDepth];
         if (!subfoldersMap.has(folderName)) {
@@ -11983,7 +11992,6 @@ class AppController {
       <div class="subject-footer">
         <span>${qCount} Cartes</span>
         <div style="display: flex; gap: 0.4rem;">
-          <button class="btn-secondary btn-start-fc" data-sub="${sub.id}" style="padding: 0.4rem 0.65rem; font-size: 0.8rem;">🎴 Flashcard</button>
           <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
         </div>
       </div>
@@ -11992,11 +12000,6 @@ class AppController {
     card.querySelector('.btn-start-quiz').addEventListener('click', (e) => {
       e.stopPropagation();
       this.startQuiz(sub.id, 'classic');
-    });
-
-    card.querySelector('.btn-start-fc').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.startFlashcardMode(sub.id);
     });
 
     container.appendChild(card);
@@ -12797,70 +12800,30 @@ class AppController {
     this.updateHeaderStats();
   }
 
-  startFlashcardMode(subjectId = null) {
-    const subjects = StorageManager.getSubjects();
-    let sub = null;
-    if (subjectId) sub = subjects[subjectId];
-    else {
-      const keys = Object.keys(subjects);
-      sub = subjects[keys[0]];
-    }
-
-    if (!sub || !sub.questions || sub.questions.length === 0) return;
-
-    const allSRS = StorageManager.getSRSData();
-    const now = Date.now();
-    const sortedQuestions = [...sub.questions].sort((a, b) => {
-      const srsA = allSRS[a.id];
-      const srsB = allSRS[b.id];
-      const dueA = srsA ? (srsA.nextDue <= now ? 0 : 1) : 0;
-      const dueB = srsB ? (srsB.nextDue <= now ? 0 : 1) : 0;
-      if (dueA !== dueB) return dueA - dueB;
-      const mA = srsA ? srsA.mastery : -1;
-      const mB = srsB ? srsB.mastery : -1;
-      return mA - mB;
-    });
-
-    this.flashcardSession = {
-      subject: sub,
-      questions: sortedQuestions,
-      currentIndex: 0
-    };
-
-    this.renderFlashcardCard();
-  }
-
-  renderFlashcardCard() {
-    if (!this.flashcardSession) return;
-    const session = this.flashcardSession;
-
-    if (session.currentIndex >= session.questions.length) {
-      alert('Toutes les flashcards de ce paquet ont été révisées !');
-      this.switchView('subjects-view');
+  startRevisionQuiz() {
+    const revisionItems = StorageManager.getRevisionItems();
+    if (!revisionItems || revisionItems.length === 0) {
+      alert("Vous n'avez aucune question loupée à réviser pour le moment ! Jouez des parties pour accumuler des erreurs.");
       return;
     }
 
-    const q = session.questions[session.currentIndex];
-    document.getElementById('fc-subject-badge').textContent = session.subject.name;
-    document.getElementById('fc-progress').textContent = `Carte ${session.currentIndex + 1}/${session.questions.length}`;
+    // Mélanger et limiter à 20 questions maximum
+    const questionsToPlay = [...revisionItems].sort(() => Math.random() - 0.5).slice(0, 20);
 
-    document.getElementById('fc-question-text').innerHTML = q.question;
-    document.getElementById('fc-correct-text').innerHTML = `Réponse : ${q.correct}`;
-    document.getElementById('fc-explanation-text').innerHTML = q.explanation ? q.explanation : `Règle / Explication : ${q.correct}`;
-
-    document.getElementById('fc-answer-box').style.display = 'block';
-
-    const nextFC = (isCorrect) => {
-      StorageManager.updateCardSRS(q.id, isCorrect);
-      session.currentIndex += 1;
-      this.renderFlashcardCard();
-    };
-
-    document.getElementById('btn-fc-again').onclick = () => nextFC(false);
-    document.getElementById('btn-fc-good').onclick = () => nextFC(true);
-    document.getElementById('btn-fc-easy').onclick = () => nextFC(true);
-
-    this.triggerMathJax();
+    this.currentSubjectId = 'revision_global';
+    
+    try {
+      this.quizEngine.startSession({
+        subjectId: 'revision_global',
+        questions: questionsToPlay,
+        mode: 'classic',
+        sessionTimerSeconds: 180
+      });
+      this.switchView('quiz-view');
+      this.renderQuizQuestion();
+    } catch (e) {
+      alert(e.message);
+    }
   }
 
   startTimer() {
