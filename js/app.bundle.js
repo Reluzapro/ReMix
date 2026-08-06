@@ -12898,7 +12898,8 @@ class AppController {
         sessionTimerSeconds: 180
       });
       this.switchView('quiz-view');
-      this.renderQuizQuestion();
+      this.renderCurrentQuestion(this.quizEngine.getCurrentQuestion());
+      this.startTimer();
     } catch (e) {
       alert(e.message);
     }
