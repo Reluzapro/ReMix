@@ -118,12 +118,15 @@ export class QuizEngine {
     if (isCorrect) {
       this.currentSession.correctCount += 1;
       this.currentSession.streak += 1;
-      const points = GamificationEngine.calculatePoints(
-        true,
-        this.currentSession.streak,
-        this.currentSession.powerupDoubleActive
-      );
-      this.currentSession.score += points;
+      
+      if (this.currentSession.mode !== 'revision') {
+        const points = GamificationEngine.calculatePoints(
+          true,
+          this.currentSession.streak,
+          this.currentSession.powerupDoubleActive
+        );
+        this.currentSession.score += points;
+      }
       SoundFX.playCorrect();
 
       if (this.currentSession.mode === 'revision') {
@@ -242,8 +245,14 @@ export class QuizEngine {
     const totalAnswered = correct + this.currentSession.wrongCount + this.currentSession.skippedCount;
     const accuracy = totalAnswered > 0 ? Math.round((correct / totalAnswered) * 100) : 0;
 
-    const xpEarned = Math.max(0, Math.floor(this.currentSession.score / 4));
-    const coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
+    let xpEarned = Math.max(0, Math.floor(this.currentSession.score / 4));
+    let coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
+
+    if (this.currentSession.mode === 'revision') {
+      this.currentSession.score = 0;
+      xpEarned = 0;
+      coinsEarned = 0;
+    }
 
     const profile = StorageManager.getProfile();
 

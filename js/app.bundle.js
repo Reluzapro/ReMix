@@ -11093,12 +11093,15 @@ class QuizEngine {
     if (isCorrect) {
       this.currentSession.correctCount += 1;
       this.currentSession.streak += 1;
-      const points = GamificationEngine.calculatePoints(
-        true,
-        this.currentSession.streak,
-        this.currentSession.powerupDoubleActive
-      );
-      this.currentSession.score += points;
+      
+      if (this.currentSession.mode !== 'revision') {
+        const points = GamificationEngine.calculatePoints(
+          true,
+          this.currentSession.streak,
+          this.currentSession.powerupDoubleActive
+        );
+        this.currentSession.score += points;
+      }
       SoundFX.playCorrect();
 
       if (this.currentSession.mode === 'revision') {
@@ -11217,8 +11220,14 @@ class QuizEngine {
     const totalAnswered = correct + this.currentSession.wrongCount + this.currentSession.skippedCount;
     const accuracy = totalAnswered > 0 ? Math.round((correct / totalAnswered) * 100) : 0;
 
-    const xpEarned = Math.max(0, Math.floor(this.currentSession.score / 4));
-    const coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
+    let xpEarned = Math.max(0, Math.floor(this.currentSession.score / 4));
+    let coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
+
+    if (this.currentSession.mode === 'revision') {
+      this.currentSession.score = 0;
+      xpEarned = 0;
+      coinsEarned = 0;
+    }
 
     const profile = StorageManager.getProfile();
 
@@ -12223,15 +12232,20 @@ class AppController {
     
     const session = this.quizEngine.currentSession;
     
-    // Hide timer elements if in revision mode
+    // Hide timer and score elements if in revision mode
     const timerBox = document.querySelector('.timer-box');
     const progBarContainer = document.querySelector('.quiz-progress-bar');
+    const scoreBadge = document.getElementById('quiz-score-badge');
+    const statPill = scoreBadge ? scoreBadge.closest('.stat-pill') : null;
+
     if (session && session.mode === 'revision') {
       if (timerBox) timerBox.style.display = 'none';
       if (progBarContainer) progBarContainer.style.display = 'none';
+      if (statPill) statPill.style.display = 'none';
     } else {
       if (timerBox) timerBox.style.display = 'flex';
       if (progBarContainer) progBarContainer.style.display = 'block';
+      if (statPill) statPill.style.display = 'block';
       
       const sessionTimeLeft = session ? session.sessionTimer : 180;
       const fillPercent = Math.min(100, Math.max(0, (sessionTimeLeft / 180) * 100));
@@ -12239,8 +12253,13 @@ class AppController {
       if (progressBar) progressBar.style.width = `${fillPercent}%`;
     }
 
-    const scoreBadge = document.getElementById('quiz-score-badge');
-    if (scoreBadge) scoreBadge.textContent = `${session?.score || 0} Pts`;
+    if (scoreBadge) {
+      if (session && session.mode === 'revision') {
+        scoreBadge.textContent = '';
+      } else {
+        scoreBadge.textContent = `${session?.score || 0} Pts`;
+      }
+    }
 
     const questionTextEl = document.getElementById('quiz-question-text');
     if (questionTextEl) questionTextEl.innerHTML = question.question;
@@ -12949,7 +12968,7 @@ class AppController {
       this.quizEngine.startSession({
         subjectId: 'revision_global',
         questions: questionsToPlay,
-        mode: 'classic',
+        mode: 'revision',
         sessionTimerSeconds: 180
       });
       this.switchView('quiz-view');
