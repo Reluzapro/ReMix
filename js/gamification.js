@@ -24,6 +24,11 @@ export const SHOP_ITEMS = [
   { id: 'theme-royal', type: 'theme', title: 'Royal Gold', desc: 'Prestige et dorures', cost: 2500, icon: '👑' },
   { id: 'theme-matrix', type: 'theme', title: 'The Matrix', desc: 'Hacker vert fluorescent', cost: 3000, icon: '💻' },
   { id: 'theme-sakura', type: 'theme', title: 'Cherry Blossom', desc: 'Doux rose pastel printanier', cost: 4000, icon: '🌸' },
+  { id: 'theme-arctic', type: 'theme', title: 'Arctic Glacier', desc: 'Bleu glacial et blanc pur', cost: 4500, icon: '🧊' },
+  { id: 'theme-lava', type: 'theme', title: 'Volcanic Lava', desc: 'Magma bouillonnant rouge intense', cost: 5000, icon: '🌋' },
+  { id: 'theme-synthwave', type: 'theme', title: 'Outrun 80s', desc: 'Magenta et orange rétro', cost: 6000, icon: '📼' },
+  { id: 'theme-cotton-candy', type: 'theme', title: 'Cotton Candy', desc: 'Rose et bleu ciel sucré', cost: 7000, icon: '🍭' },
+  { id: 'theme-abyss', type: 'theme', title: 'Void Abyss', desc: 'Le noir absolu de l\\'espace', cost: 10000, icon: '🌌' },
 
   // Avatars
   { id: 'avatar-student', type: 'avatar', title: 'Étudiant Assidu', desc: 'Avatar classique de révision', cost: 0, icon: '🎓' },
@@ -36,7 +41,12 @@ export const SHOP_ITEMS = [
   { id: 'avatar-dragon', type: 'avatar', title: 'Dragon', desc: 'Force mythologique', cost: 2000, icon: '🐉' },
   { id: 'avatar-astronaut', type: 'avatar', title: 'Astronaute', desc: 'Au-delà des étoiles', cost: 2500, icon: '👨‍🚀' },
   { id: 'avatar-devil', type: 'avatar', title: 'Démon du QCM', desc: 'Infernal', cost: 3000, icon: '😈' },
-  { id: 'avatar-god', type: 'avatar', title: 'Dieu de la Révision', desc: 'L\\'omniscience pure', cost: 5000, icon: '👁️' },
+  { id: 'avatar-hacker', type: 'avatar', title: 'Anonymous Hacker', desc: 'Pirate des serveurs', cost: 3500, icon: '💻' },
+  { id: 'avatar-samurai', type: 'avatar', title: 'Samurai', desc: 'Discipline de fer', cost: 4000, icon: '⛩️' },
+  { id: 'avatar-superhero', type: 'avatar', title: 'Super-Héros', desc: 'Sauveur des notes', cost: 4500, icon: '🦸‍♂️' },
+  { id: 'avatar-ghost', type: 'avatar', title: 'Fantôme', desc: 'Invisible pendant le contrôle', cost: 5000, icon: '👻' },
+  { id: 'avatar-einstein', type: 'avatar', title: 'Einstein', desc: 'Génie absolu', cost: 7500, icon: '🧠' },
+  { id: 'avatar-god', type: 'avatar', title: 'Dieu de la Révision', desc: 'L\\'omniscience pure', cost: 10000, icon: '👁️' },
 
   // Emojis de Duel
   { id: 'emoji-fire', type: 'emoji', title: 'Enflammé', desc: 'Emoji de duel', cost: 0, icon: '🔥' },
@@ -52,11 +62,18 @@ export const SHOP_ITEMS = [
   { id: 'emoji-clown', type: 'emoji', title: 'Clown', desc: 'Emoji de duel', cost: 450, icon: '🤡' },
   { id: 'emoji-skull', type: 'emoji', title: 'Skull', desc: 'Emoji de duel', cost: 500, icon: '💀' },
   { id: 'emoji-nerd', type: 'emoji', title: 'Nerd', desc: 'Emoji de duel', cost: 600, icon: '🤓' },
+  { id: 'emoji-sweat', type: 'emoji', title: 'Sueur', desc: 'Emoji de duel', cost: 700, icon: '😅' },
   { id: 'emoji-muscle', type: 'emoji', title: 'Muscle', desc: 'Emoji de duel', cost: 800, icon: '💪' },
+  { id: 'emoji-sleeping', type: 'emoji', title: 'Zzz', desc: 'Emoji de duel', cost: 900, icon: '😴' },
   { id: 'emoji-money', type: 'emoji', title: 'Argent', desc: 'Emoji de duel', cost: 1000, icon: '💸' },
+  { id: 'emoji-angry', type: 'emoji', title: 'Énervé', desc: 'Emoji de duel', cost: 1200, icon: '😡' },
   { id: 'emoji-poop', type: 'emoji', title: 'Caca', desc: 'Emoji de duel', cost: 1500, icon: '💩' },
+  { id: 'emoji-salute', type: 'emoji', title: 'Respect', desc: 'Emoji de duel', cost: 1800, icon: '🫡' },
   { id: 'emoji-eyes', type: 'emoji', title: 'Yeux', desc: 'Emoji de duel', cost: 2000, icon: '👀' },
+  { id: 'emoji-heart', type: 'emoji', title: 'Coeur', desc: 'Emoji de duel', cost: 2500, icon: '❤️' },
   { id: 'emoji-crown', type: 'emoji', title: 'Couronne', desc: 'Emoji de duel', cost: 3000, icon: '👑' },
+  { id: 'emoji-100', type: 'emoji', title: '100%', desc: 'Emoji de duel', cost: 4000, icon: '💯' },
+  { id: 'emoji-bomb', type: 'emoji', title: 'Bombe', desc: 'Emoji de duel', cost: 5000, icon: '💣' },
 
   // Power-ups
   { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
