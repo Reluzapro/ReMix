@@ -1285,8 +1285,7 @@ class AppController {
     const elFifty = document.getElementById('pu-count-fifty');
     if (elFifty) elFifty.textContent = inv.powerup_fifty || 0;
 
-    const elTime = document.getElementById('pu-count-time');
-    if (elTime) elTime.textContent = inv.powerup_time || 0;
+
 
     const elSkip = document.getElementById('pu-count-skip');
     if (elSkip) elSkip.textContent = inv.powerup_skip || 0;

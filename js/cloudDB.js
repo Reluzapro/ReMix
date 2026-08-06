@@ -89,7 +89,7 @@ export function mergeProfileData(localProfile, cloudProfile) {
   const cInv = cloudProfile.inventory || {};
   merged.inventory = {
     powerup_fifty: Math.max(lInv.powerup_fifty || 0, cInv.powerup_fifty || 0),
-    powerup_time: Math.max(lInv.powerup_time || 0, cInv.powerup_time || 0),
+
     powerup_skip: Math.max(lInv.powerup_skip || 0, cInv.powerup_skip || 0)
   };
 

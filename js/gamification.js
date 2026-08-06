@@ -28,7 +28,7 @@ export const SHOP_ITEMS = [
 
   // Power-ups
   { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
-  { id: 'powerup_time', type: 'powerup', title: '+15 Sec', desc: 'Ajoute 15 secondes au timer', cost: 30, icon: '⏳' },
+
   { id: 'powerup_skip', type: 'powerup', title: 'Joker (Passer)', desc: 'Passe la question sans perdre de streak', cost: 60, icon: '⏭️' }
 ];
 

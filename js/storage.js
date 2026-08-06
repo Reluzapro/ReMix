@@ -28,7 +28,7 @@ const DEFAULT_PROFILE = {
   purchasedItems: ['theme-cyberpunk', 'avatar-student'],
   inventory: {
     powerup_fifty: 2,
-    powerup_time: 2,
+
     powerup_skip: 1
   },
   customRewards: [],

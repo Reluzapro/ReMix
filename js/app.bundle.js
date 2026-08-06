@@ -9764,7 +9764,7 @@ function mergeProfileData(localProfile, cloudProfile) {
   const cInv = cloudProfile.inventory || {};
   merged.inventory = {
     powerup_fifty: Math.max(lInv.powerup_fifty || 0, cInv.powerup_fifty || 0),
-    powerup_time: Math.max(lInv.powerup_time || 0, cInv.powerup_time || 0),
+
     powerup_skip: Math.max(lInv.powerup_skip || 0, cInv.powerup_skip || 0)
   };
 
@@ -9902,7 +9902,7 @@ const DEFAULT_PROFILE = {
   purchasedItems: ['theme-cyberpunk', 'avatar-student'],
   inventory: {
     powerup_fifty: 2,
-    powerup_time: 2,
+
     powerup_skip: 1
   },
   customRewards: [],
@@ -10763,7 +10763,7 @@ const SHOP_ITEMS = [
 
   // Power-ups
   { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
-  { id: 'powerup_time', type: 'powerup', title: '+15 Sec', desc: 'Ajoute 15 secondes au timer', cost: 30, icon: '⏳' },
+
   { id: 'powerup_skip', type: 'powerup', title: 'Joker (Passer)', desc: 'Passe la question sans perdre de streak', cost: 60, icon: '⏭️' }
 ];
 
@@ -11127,10 +11127,7 @@ class QuizEngine {
       const wrongOpts = currentQ.shuffledOptions.filter(opt => opt !== currentQ.correct);
       const toRemove = wrongOpts.sort(() => Math.random() - 0.5).slice(0, 2);
       this.currentSession.disabledOptions = toRemove;
-    } else if (powerupType === 'powerup_time') {
-      if (this.currentSession.sessionTimer !== undefined) {
-        this.currentSession.sessionTimer += 15;
-      }
+
     } else if (powerupType === 'powerup_double') {
       this.currentSession.powerupDoubleActive = true;
     } else if (powerupType === 'powerup_skip') {
@@ -12905,8 +12902,7 @@ class AppController {
     const elFifty = document.getElementById('pu-count-fifty');
     if (elFifty) elFifty.textContent = inv.powerup_fifty || 0;
 
-    const elTime = document.getElementById('pu-count-time');
-    if (elTime) elTime.textContent = inv.powerup_time || 0;
+
 
     const elSkip = document.getElementById('pu-count-skip');
     if (elSkip) elSkip.textContent = inv.powerup_skip || 0;

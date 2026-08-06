@@ -202,10 +202,7 @@ export class QuizEngine {
       const wrongOpts = currentQ.shuffledOptions.filter(opt => opt !== currentQ.correct);
       const toRemove = wrongOpts.sort(() => Math.random() - 0.5).slice(0, 2);
       this.currentSession.disabledOptions = toRemove;
-    } else if (powerupType === 'powerup_time') {
-      if (this.currentSession.sessionTimer !== undefined) {
-        this.currentSession.sessionTimer += 15;
-      }
+
     } else if (powerupType === 'powerup_double') {
       this.currentSession.powerupDoubleActive = true;
     } else if (powerupType === 'powerup_skip') {
