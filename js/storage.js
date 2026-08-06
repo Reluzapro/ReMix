@@ -1,6 +1,6 @@
 // Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Supabase Cloud Database sync, and Anti-Cheat Checksum auto-purge
 import { DEFAULT_SUBJECTS } from './questionsData.js';
-import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData } from './cloudDB.js';
+import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData, saveFriendId } from './cloudDB.js';
 
 const STORAGE_KEYS = {
   SUBJECTS: 'rev_game_subjects_v6',
@@ -64,6 +64,13 @@ async function hashPasscode(passcode) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
   return btoa(passcode);
+}
+
+function generateFriendId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  return 'RMX-' + code;
 }
 
 function computeAntiCheatToken(profile) {
@@ -356,6 +363,15 @@ export class StorageManager {
       } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
         localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
       }
+      // Ensure friendId is set and saved to Supabase column
+      if (!profile.friendId) {
+        profile.friendId = generateFriendId();
+        this.saveProfile(profile);
+        saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
+      } else {
+        // Ensure the Supabase column is updated (in case migrated from old account)
+        saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
+      }
       return { success: true, isNew: false, profile };
     }
 
@@ -376,8 +392,12 @@ export class StorageManager {
     const profile = this.getProfile();
     profile.name = username.trim();
     profile.cloudAccount = { username: cleanUser, hashedKey };
+    if (!profile.friendId) {
+      profile.friendId = generateFriendId();
+    }
     this.saveProfile(profile);
     pushProfileToCloud(cleanUser, hashedKey, profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems()).catch(() => {});
+    saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
     return { success: true, isNew: true, profile };
   }
 

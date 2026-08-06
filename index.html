@@ -55,6 +55,11 @@
         <span id="header-cloud-user" style="font-weight: 700;">Connexion</span>
       </div>
 
+      <div class="stat-pill" id="header-notif-btn" style="cursor: pointer; background: rgba(245, 158, 11, 0.12); border: 1px solid var(--accent-amber); position: relative; display: none;" title="Notifications">
+        <span>🔔</span>
+        <span id="header-notif-badge" style="position: absolute; top: -5px; right: -5px; background: var(--accent-red, #ef4444); color: white; font-size: 0.65rem; font-weight: 700; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; display: none;">0</span>
+      </div>
+
       <div class="level-badge" id="header-level">
         Niv. 1
       </div>
@@ -495,6 +500,29 @@
         </div>
       </div>
 
+      <!-- Friends Section -->
+      <div class="section-title">👥 Mes Amis</div>
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 2.5rem;">
+        <!-- My Friend ID -->
+        <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid var(--accent-purple); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Ton ID Ami (partage-le à tes amis)</div>
+            <div id="my-friend-id" style="font-size: 1.4rem; font-weight: 800; font-family: monospace; color: var(--accent-cyan); letter-spacing: 2px;">---</div>
+          </div>
+          <button class="btn-secondary" id="btn-copy-friend-id" style="padding: 0.5rem 1rem; font-size: 0.85rem;">📋 Copier</button>
+        </div>
+        <!-- Add Friend -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+          <input type="text" id="input-add-friend" placeholder="Entrer un ID Ami (ex: RMX-A3F9)" style="flex: 1; background: var(--bg-input, rgba(255,255,255,0.05)); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.65rem 1rem; color: var(--text-primary); font-size: 0.9rem; outline: none;" maxlength="8">
+          <button class="btn-primary" id="btn-add-friend" style="padding: 0.65rem 1.25rem;">➕ Ajouter</button>
+        </div>
+        <div id="add-friend-status" style="font-size: 0.85rem; margin-bottom: 1rem; min-height: 1.2rem;"></div>
+        <!-- Friend List -->
+        <div id="friends-list-container">
+          <div style="color: var(--text-secondary); text-align: center; padding: 1rem; font-size: 0.9rem;">Chargement...</div>
+        </div>
+      </div>
+
       <div class="section-title">Badges & Hauts Faits</div>
       <div class="shop-grid" id="achievements-container" style="margin-bottom: 2.5rem;">
         <!-- Injected via JS -->
@@ -575,6 +603,30 @@
         <img id="show-reward-image" src="" alt="Récompense" style="max-width: 100%; max-height: 300px; object-fit: contain; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid var(--border-color);">
       </div>
       <button class="btn-primary" onclick="document.getElementById('modal-show-reward').classList.remove('active')" style="width: 100%;">Génial !</button>
+    </div>
+  </div>
+
+  <!-- Modal Friend Notifications -->
+  <div class="modal-overlay" id="modal-friend-notifs">
+    <div class="modal-card glass-panel" style="max-width: 480px; width: 95%;">
+      <h2 style="font-family: var(--font-title); font-size: 1.5rem; margin-bottom: 1.25rem; color: var(--accent-amber);">🔔 Notifications</h2>
+      <div id="friend-notifs-list" style="max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="color: var(--text-secondary); text-align: center; padding: 1.5rem;">Aucune notification</div>
+      </div>
+      <button class="btn-secondary" onclick="document.getElementById('modal-friend-notifs').classList.remove('active')" style="width: 100%; margin-top: 1.25rem;">Fermer</button>
+    </div>
+  </div>
+
+  <!-- Modal Share Reward -->
+  <div class="modal-overlay" id="modal-share-reward">
+    <div class="modal-card glass-panel" style="max-width: 440px; width: 95%;">
+      <h2 style="font-family: var(--font-title); font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--accent-cyan);">🎁 Offrir une Récompense</h2>
+      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem;">Choisis une récompense à envoyer à <strong id="share-target-name"></strong> :</p>
+      <div id="share-reward-list" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.25rem;"></div>
+      <div id="share-reward-status" style="font-size: 0.85rem; margin-bottom: 0.75rem; min-height: 1.2rem;"></div>
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="btn-secondary" onclick="document.getElementById('modal-share-reward').classList.remove('active')" style="flex: 1;">Annuler</button>
+      </div>
     </div>
   </div>
 

@@ -5,6 +5,7 @@ import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS } from './gamification.js'
 import { CSVParser } from './csvParser.js';
 import { SoundFX } from './audio.js';
 import { MultiplayerEngine } from './multiplayer.js';
+import { lookupByFriendId, addFriend, getFriends, removeFriend, sendFriendNotification, getMyNotifications, markNotificationRead } from './cloudDB.js';
 
 class AppController {
   constructor() {
@@ -35,6 +36,7 @@ class AppController {
     this.setupCSVImporter();
     this.setupEventListeners();
     this.setupProfileAdminTrigger();
+    this.setupFriendSystem();
 
     // Periodic 30-second silent background cloud sync heartbeat
     setInterval(async () => {
@@ -46,10 +48,326 @@ class AppController {
           this.renderSubjects();
         }
       }
+      // Poll friend notifications
+      await this.pollFriendNotifications();
     }, 30000);
+
+    // Initial notification poll after short delay
+    setTimeout(() => this.pollFriendNotifications(), 3000);
+  }
+
+
+  // ─── FRIEND SYSTEM ────────────────────────────────────────────────────────
+
+  async renderFriends() {
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username;
+    const friendIdEl = document.getElementById('my-friend-id');
+    if (friendIdEl) {
+      friendIdEl.textContent = profile.friendId || (myUsername ? '...' : '🔒 Connexion requise');
+    }
+
+    const container = document.getElementById('friends-list-container');
+    if (!container) return;
+
+    if (!myUsername) {
+      container.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 1rem; font-size: 0.9rem;">🔒 Connecte-toi à un Compte Cloud pour utiliser les amis.</div>`;
+      return;
+    }
+
+    container.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 1rem; font-size: 0.85rem;">Chargement...</div>`;
+    const friends = await getFriends(myUsername);
+
+    if (friends.length === 0) {
+      container.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 1rem; font-size: 0.9rem;">Aucun ami pour l'instant. Partage ton ID pour commencer !</div>`;
+      return;
+    }
+
+    container.innerHTML = '';
+    friends.forEach(friend => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md);';
+      row.innerHTML = `
+        <div style="font-size: 1.8rem;">${friend.avatar}</div>
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 0.95rem;">${friend.name}</div>
+          <div style="font-size: 0.75rem; color: var(--text-secondary);">@${friend.username} · Niv. ${friend.level} · <span style="font-family: monospace; color: var(--accent-purple);">${friend.friendId}</span></div>
+        </div>
+        <div style="display: flex; gap: 0.4rem;">
+          <button class="btn-secondary btn-invite-friend" data-username="${friend.username}" data-name="${friend.name}" style="padding: 0.4rem 0.65rem; font-size: 0.8rem;" title="Inviter en duel">⚔️</button>
+          <button class="btn-secondary btn-share-reward" data-username="${friend.username}" data-name="${friend.name}" style="padding: 0.4rem 0.65rem; font-size: 0.8rem;" title="Offrir une récompense">🎁</button>
+          <button class="btn-secondary btn-remove-friend" data-username="${friend.username}" style="padding: 0.4rem 0.65rem; font-size: 0.8rem; color: var(--accent-red); border-color: rgba(239,68,68,0.4);" title="Retirer">✕</button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+
+    // Wire friend action buttons
+    container.querySelectorAll('.btn-invite-friend').forEach(btn => {
+      btn.addEventListener('click', () => this.inviteFriendToDuel(btn.dataset.username, btn.dataset.name));
+    });
+    container.querySelectorAll('.btn-share-reward').forEach(btn => {
+      btn.addEventListener('click', () => this.openShareRewardModal(btn.dataset.username, btn.dataset.name));
+    });
+    container.querySelectorAll('.btn-remove-friend').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm(`Retirer ${btn.dataset.username} de tes amis ?`)) return;
+        await removeFriend(myUsername, btn.dataset.username);
+        await this.renderFriends();
+      });
+    });
+  }
+
+  async inviteFriendToDuel(friendUsername, friendName) {
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username;
+    if (!myUsername) { alert('Connexion Cloud requise !'); return; }
+
+    // Create a private battle room
+    const subjects = StorageManager.getSubjects();
+    const subjectIds = Object.keys(subjects);
+    if (subjectIds.length === 0) { alert('Aucun cours disponible pour un duel !'); return; }
+
+    // Use a default subject (first available) - user picks in duel lobby anyway
+    const subjectId = subjectIds[0];
+    const subject = subjects[subjectId];
+    const result = await MultiplayerEngine.createPrivateRoom({ id: subjectId, name: subject.name || subjectId, questions: Object.values(subject.questions || {}) }, 0);
+
+    if (!result.success) { alert(result.message); return; }
+
+    const sent = await sendFriendNotification(
+      friendUsername, myUsername, profile.avatar || '🎓',
+      'duel_invite',
+      { battleCode: result.code, subjectName: subject.name || subjectId, createdAt: Date.now() }
+    );
+
+    if (sent) {
+      alert(`✅ Invitation envoyée à ${friendName} ! Code de salon : ${result.code}`);
+    } else {
+      alert('❌ Erreur lors de l\'envoi de l\'invitation.');
+    }
+  }
+
+  openShareRewardModal(friendUsername, friendName) {
+    const profile = StorageManager.getProfile();
+    const rewards = profile.customRewards || [];
+    const modal = document.getElementById('modal-share-reward');
+    const nameEl = document.getElementById('share-target-name');
+    const list = document.getElementById('share-reward-list');
+    const status = document.getElementById('share-reward-status');
+    if (!modal || !list) return;
+
+    if (nameEl) nameEl.textContent = friendName;
+    if (status) status.textContent = '';
+
+    if (rewards.length === 0) {
+      list.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Aucune récompense personnelle à partager.</div>`;
+    } else {
+      list.innerHTML = '';
+      rewards.forEach(rew => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-secondary';
+        btn.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; text-align: left; width: 100%;';
+        btn.innerHTML = `<span style="font-size: 1.5rem;">🎁</span><div><div style="font-weight: 700;">${rew.title}</div><div style="font-size: 0.8rem; color: var(--text-secondary);">${rew.cost} 🪙</div></div>`;
+        btn.addEventListener('click', async () => {
+          const myUsername = profile.cloudAccount?.username;
+          if (!myUsername) return;
+          btn.disabled = true;
+          btn.textContent = 'Envoi...';
+          const sent = await sendFriendNotification(
+            friendUsername, myUsername, profile.avatar || '🎓',
+            'reward_share',
+            { reward: { id: `rew_${Date.now()}`, title: rew.title, cost: rew.cost, image: rew.image || null, redeemedCount: 0 } }
+          );
+          if (status) status.textContent = sent ? `✅ "${rew.title}" envoyée à ${friendName} !` : '❌ Erreur lors de l\'envoi.';
+          if (status) status.style.color = sent ? 'var(--accent-green, #22c55e)' : 'var(--accent-red)';
+          if (sent) setTimeout(() => modal.classList.remove('active'), 1500);
+        });
+        list.appendChild(btn);
+      });
+    }
+
+    modal.classList.add('active');
+  }
+
+  async pollFriendNotifications() {
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username;
+    if (!myUsername) return;
+
+    const notifs = await getMyNotifications(myUsername);
+    const btn = document.getElementById('header-notif-btn');
+    const badge = document.getElementById('header-notif-badge');
+    if (!btn) return;
+
+    if (notifs.length > 0) {
+      btn.style.display = 'flex';
+      if (badge) { badge.style.display = 'flex'; badge.textContent = notifs.length; }
+    } else {
+      if (badge) badge.style.display = 'none';
+    }
+
+    // Store for modal rendering
+    this._pendingNotifs = notifs;
+  }
+
+  async renderNotificationsModal() {
+    const notifs = this._pendingNotifs || [];
+    const list = document.getElementById('friend-notifs-list');
+    if (!list) return;
+
+    if (notifs.length === 0) {
+      list.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 1.5rem;">Aucune nouvelle notification 🎉</div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    notifs.forEach(n => {
+      const card = document.createElement('div');
+      card.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem;';
+
+      if (n.type === 'duel_invite') {
+        const payload = n.payload || {};
+        card.innerHTML = `
+          <span style="font-size: 2rem;">${n.from_avatar || '🎓'}</span>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; font-size: 0.95rem;">⚔️ Défi de ${n.from_username}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">${payload.subjectName || 'Quiz'} · Code : <strong style="color: var(--accent-cyan); font-family: monospace;">${payload.battleCode || '???'}</strong></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+            <button class="btn-primary btn-notif-join" data-code="${payload.battleCode || ''}" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">Rejoindre</button>
+            <button class="btn-secondary btn-notif-dismiss" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">Ignorer</button>
+          </div>
+        `;
+      } else if (n.type === 'reward_share') {
+        const rew = n.payload?.reward || {};
+        card.innerHTML = `
+          <span style="font-size: 2rem;">${n.from_avatar || '🎓'}</span>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; font-size: 0.95rem;">🎁 Cadeau de ${n.from_username}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">"${rew.title || '?'}" (${rew.cost || 0} 🪙)</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+            <button class="btn-primary btn-notif-accept-reward" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">Accepter</button>
+            <button class="btn-secondary btn-notif-dismiss" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">Refuser</button>
+          </div>
+        `;
+      }
+      list.appendChild(card);
+
+      // Wire buttons
+      card.querySelectorAll('.btn-notif-dismiss').forEach(b => {
+        b.addEventListener('click', async () => {
+          await markNotificationRead(b.dataset.id);
+          this._pendingNotifs = (this._pendingNotifs || []).filter(x => x.id !== b.dataset.id);
+          card.remove();
+          await this.pollFriendNotifications();
+        });
+      });
+
+      card.querySelectorAll('.btn-notif-join').forEach(b => {
+        b.addEventListener('click', async () => {
+          await markNotificationRead(b.dataset.id);
+          const code = b.dataset.code;
+          document.getElementById('modal-friend-notifs')?.classList.remove('active');
+          // Navigate to duels and pre-fill code
+          const duelsTab = document.querySelector('[data-target="duels-view"]');
+          if (duelsTab) duelsTab.click();
+          setTimeout(() => {
+            const codeInput = document.getElementById('input-duel-code');
+            const joinBtn = document.getElementById('btn-join-duel');
+            if (codeInput) codeInput.value = code;
+            if (joinBtn) joinBtn.click();
+          }, 300);
+          this._pendingNotifs = (this._pendingNotifs || []).filter(x => x.id !== b.dataset.id);
+          await this.pollFriendNotifications();
+        });
+      });
+
+      card.querySelectorAll('.btn-notif-accept-reward').forEach(b => {
+        b.addEventListener('click', async () => {
+          const notif = notifs.find(x => x.id === b.dataset.id);
+          if (!notif) return;
+          const rew = notif.payload?.reward;
+          if (rew) {
+            const profile = StorageManager.getProfile();
+            if (!profile.customRewards) profile.customRewards = [];
+            // Give new unique ID to avoid collision
+            profile.customRewards.push({ ...rew, id: `rew_${Date.now()}`, redeemedCount: 0 });
+            StorageManager.saveProfile(profile);
+            StorageManager.autoSyncCloud();
+            this.renderShop();
+          }
+          await markNotificationRead(b.dataset.id);
+          this._pendingNotifs = (this._pendingNotifs || []).filter(x => x.id !== b.dataset.id);
+          card.remove();
+          await this.pollFriendNotifications();
+          alert(`🎁 Récompense "${rew?.title}" ajoutée à ta liste !`);
+        });
+      });
+    });
+  }
+
+  setupFriendSystem() {
+    // Copy friend ID
+    safeOn('btn-copy-friend-id', 'click', () => {
+      const profile = StorageManager.getProfile();
+      const id = profile.friendId || '';
+      if (!id) { alert('Connecte-toi d\'abord à un Compte Cloud !'); return; }
+      navigator.clipboard.writeText(id).then(() => {
+        const btn = document.getElementById('btn-copy-friend-id');
+        if (btn) { btn.textContent = '✅ Copié !'; setTimeout(() => btn.textContent = '📋 Copier', 2000); }
+      });
+    });
+
+    // Add friend by ID
+    safeOn('btn-add-friend', 'click', async () => {
+      const profile = StorageManager.getProfile();
+      const myUsername = profile.cloudAccount?.username;
+      const statusEl = document.getElementById('add-friend-status');
+      const input = document.getElementById('input-add-friend');
+      if (!myUsername) { if (statusEl) { statusEl.textContent = '🔒 Connexion Cloud requise.'; statusEl.style.color = 'var(--accent-red)'; } return; }
+
+      const rawId = input ? input.value.trim().toUpperCase() : '';
+      if (!rawId || rawId.length < 4) { if (statusEl) { statusEl.textContent = '❌ ID invalide.'; statusEl.style.color = 'var(--accent-red)'; } return; }
+
+      const friendId = rawId.startsWith('RMX-') ? rawId : 'RMX-' + rawId;
+      if (statusEl) { statusEl.textContent = 'Recherche...'; statusEl.style.color = 'var(--text-secondary)'; }
+
+      const found = await lookupByFriendId(friendId);
+      if (!found) { if (statusEl) { statusEl.textContent = '❌ Aucun joueur trouvé avec cet ID.'; statusEl.style.color = 'var(--accent-red)'; } return; }
+      if (found.username === myUsername) { if (statusEl) { statusEl.textContent = '😅 C\'est toi !'; statusEl.style.color = 'var(--accent-amber)'; } return; }
+
+      const res = await addFriend(myUsername, found.username);
+      if (statusEl) {
+        if (res.success) {
+          statusEl.textContent = `✅ ${found.profile_data?.name || found.username} ajouté(e) !`;
+          statusEl.style.color = 'var(--accent-green, #22c55e)';
+          if (input) input.value = '';
+          await this.renderFriends();
+        } else {
+          statusEl.textContent = '❌ Erreur : ' + (res.error || 'impossible d\'ajouter cet ami.');
+          statusEl.style.color = 'var(--accent-red)';
+        }
+      }
+    });
+
+    // Notification bell
+    safeOn('header-notif-btn', 'click', async () => {
+      await this.renderNotificationsModal();
+      document.getElementById('modal-friend-notifs')?.classList.add('active');
+    });
+
+    // Render friends when profile tab opens
+    document.querySelectorAll('[data-target="profile-view"]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        setTimeout(() => this.renderFriends(), 100);
+      });
+    });
   }
 
   setupProfileAdminTrigger() {
+
     const attachClickToEl = (el) => {
       if (!el) return;
       el.addEventListener('click', () => {
@@ -2149,6 +2467,8 @@ function startApp() {
       app.renderShop();
       app.renderProfile();
       app.updatePausedBanner();
+      app.pollFriendNotifications();
+      app.renderFriends();
     }
   });
 

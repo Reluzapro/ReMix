@@ -208,3 +208,149 @@ export async function fetchProfileFromCloud(username, hashedKey) {
     return null;
   }
 }
+
+// --- FRIEND SYSTEM ---
+
+export async function lookupByFriendId(friendId) {
+  try {
+    const db = getDB();
+    if (!db) return null;
+    const { data, error } = await db
+      .from('profiles')
+      .select('username, friend_id, profile_data')
+      .eq('friend_id', friendId.toUpperCase())
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.log('Friend lookup failed:', e.message);
+    return null;
+  }
+}
+
+export async function saveFriendId(username, hashedKey, friendId) {
+  try {
+    const db = getDB();
+    if (!db) return;
+    await db.from('profiles')
+      .update({ friend_id: friendId })
+      .eq('username', username.toLowerCase())
+      .eq('hashed_key', hashedKey);
+  } catch (e) {
+    console.log('saveFriendId failed:', e.message);
+  }
+}
+
+export async function addFriend(myUsername, friendUsername) {
+  try {
+    const db = getDB();
+    if (!db) return { success: false };
+    const { error } = await db.from('friendships').insert({
+      requester_username: myUsername.toLowerCase(),
+      addressee_username: friendUsername.toLowerCase()
+    });
+    if (error && error.code !== '23505') throw error; // ignore duplicate
+    return { success: true };
+  } catch (e) {
+    console.log('addFriend failed:', e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+export async function getFriends(myUsername) {
+  try {
+    const db = getDB();
+    if (!db) return [];
+    const me = myUsername.toLowerCase();
+    // Get all friendships where I am requester or addressee
+    const { data, error } = await db.from('friendships')
+      .select('requester_username, addressee_username')
+      .or(`requester_username.eq.${me},addressee_username.eq.${me}`);
+    if (error) throw error;
+    if (!data || data.length === 0) return [];
+
+    const friendUsernames = data.map(f =>
+      f.requester_username === me ? f.addressee_username : f.requester_username
+    );
+
+    // Fetch their profile info
+    const { data: profiles, error: pErr } = await db.from('profiles')
+      .select('username, friend_id, profile_data')
+      .in('username', friendUsernames);
+    if (pErr) throw pErr;
+
+    return (profiles || []).map(p => {
+      const pd = p.profile_data || {};
+      return {
+        username: p.username,
+        friendId: p.friend_id || '???',
+        name: pd.name || p.username,
+        avatar: pd.avatar || '🎓',
+        level: pd.level || 1
+      };
+    });
+  } catch (e) {
+    console.log('getFriends failed:', e.message);
+    return [];
+  }
+}
+
+export async function removeFriend(myUsername, friendUsername) {
+  try {
+    const db = getDB();
+    if (!db) return;
+    const me = myUsername.toLowerCase();
+    const friend = friendUsername.toLowerCase();
+    await db.from('friendships').delete()
+      .or(`and(requester_username.eq.${me},addressee_username.eq.${friend}),and(requester_username.eq.${friend},addressee_username.eq.${me})`);
+  } catch (e) {
+    console.log('removeFriend failed:', e.message);
+  }
+}
+
+export async function sendFriendNotification(toUsername, fromUsername, fromAvatar, type, payload) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('friend_notifications').insert({
+      to_username: toUsername.toLowerCase(),
+      from_username: fromUsername.toLowerCase(),
+      from_avatar: fromAvatar || '🎓',
+      type,
+      payload
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.log('sendFriendNotification failed:', e.message);
+    return false;
+  }
+}
+
+export async function getMyNotifications(myUsername) {
+  try {
+    const db = getDB();
+    if (!db) return [];
+    const { data, error } = await db.from('friend_notifications')
+      .select('*')
+      .eq('to_username', myUsername.toLowerCase())
+      .eq('is_read', false)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.log('getMyNotifications failed:', e.message);
+    return [];
+  }
+}
+
+export async function markNotificationRead(id) {
+  try {
+    const db = getDB();
+    if (!db) return;
+    await db.from('friend_notifications').update({ is_read: true }).eq('id', id);
+  } catch (e) {
+    console.log('markNotificationRead failed:', e.message);
+  }
+}
+
