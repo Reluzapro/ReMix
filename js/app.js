@@ -1416,8 +1416,12 @@ class AppController {
       profile.customRewards.forEach(rew => {
         const card = document.createElement('div');
         card.className = 'shop-card';
+        const iconHtml = rew.image 
+          ? `<img src="${rew.image}" alt="${rew.title}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 12px; margin-bottom: 0.5rem; border: 2px solid var(--border-color);">`
+          : `<div class="shop-icon">🎁</div>`;
+
         card.innerHTML = `
-          <div class="shop-icon">🎁</div>
+          ${iconHtml}
           <div class="shop-item-title">${rew.title}</div>
           <div class="shop-item-desc">Débloqué ${rew.redeemedCount || 0} fois (${rew.cost} 🪙)</div>
           <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; width: 100%;">
@@ -1962,7 +1966,72 @@ class AppController {
     });
 
     const modal = document.getElementById('modal-custom-reward');
+    const imgInput = document.getElementById('input-reward-image');
+    const imgPreviewDiv = document.getElementById('preview-reward-image');
+    const imgPreviewTag = imgPreviewDiv ? imgPreviewDiv.querySelector('img') : null;
+    let currentCompressedImage = null;
+
+    function resetRewardModal() {
+      document.getElementById('input-reward-title').value = '';
+      document.getElementById('input-reward-cost').value = '';
+      if (imgInput) imgInput.value = '';
+      if (imgPreviewDiv) imgPreviewDiv.style.display = 'none';
+      if (imgPreviewTag) imgPreviewTag.src = '';
+      currentCompressedImage = null;
+    }
+
+    if (imgInput) {
+      imgInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+          if (imgPreviewDiv) imgPreviewDiv.style.display = 'none';
+          currentCompressedImage = null;
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_SIZE = 300;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_SIZE) {
+                height *= MAX_SIZE / width;
+                width = MAX_SIZE;
+              }
+            } else {
+              if (height > MAX_SIZE) {
+                width *= MAX_SIZE / height;
+                height = MAX_SIZE;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Compress to WebP or JPEG
+            const dataUrl = canvas.toDataURL('image/webp', 0.8);
+            currentCompressedImage = dataUrl;
+
+            if (imgPreviewDiv && imgPreviewTag) {
+              imgPreviewTag.src = dataUrl;
+              imgPreviewDiv.style.display = 'block';
+            }
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
     safeOn('btn-add-custom-reward', 'click', () => {
+      resetRewardModal();
       if (modal) modal.classList.add('active');
     });
 
@@ -1988,6 +2057,7 @@ class AppController {
         id: `rew_${Date.now()}`,
         title: title,
         cost: cost,
+        image: currentCompressedImage,
         redeemedCount: 0
       });
 

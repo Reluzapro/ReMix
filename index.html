@@ -549,7 +549,15 @@
       <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">Définissez une vraie récompense que vous pourrez débloquer en révisant !</p>
 
       <input type="text" id="input-reward-title" placeholder="Ex: ☕ Pause café 15 min" style="width: 100%; padding: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1rem;">
-      <input type="number" id="input-reward-cost" placeholder="Coût en pièces (Ex: 100)" style="width: 100%; padding: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1.5rem;">
+      <input type="number" id="input-reward-cost" placeholder="Coût en pièces (Ex: 100)" style="width: 100%; padding: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white; margin-bottom: 1rem;">
+      
+      <div style="margin-bottom: 1.5rem;">
+        <label for="input-reward-image" style="display: block; color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Ajouter une photo (Optionnel)</label>
+        <input type="file" id="input-reward-image" accept="image/*" style="width: 100%; padding: 0.5rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: white;">
+        <div id="preview-reward-image" style="margin-top: 0.75rem; display: none; text-align: center;">
+          <img src="" alt="Prévisualisation" style="max-width: 100px; max-height: 100px; border-radius: 8px; border: 1px solid var(--border-color); object-fit: cover;">
+        </div>
+      </div>
 
       <div style="display: flex; gap: 1rem; justify-content: flex-end;">
         <button class="btn-secondary" id="btn-modal-cancel">Annuler</button>
