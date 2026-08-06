@@ -10797,6 +10797,10 @@ const SHOP_ITEMS = [
   { id: 'theme-emerald', type: 'theme', title: 'Emerald Forest', desc: 'Design apaisant vert émeraude et or', cost: 800, icon: '🌲' },
   { id: 'theme-solar', type: 'theme', title: 'Solar Flare', desc: 'Mode chaud orange et ambre dynamisant', cost: 1000, icon: '☀️' },
   { id: 'theme-dracula', type: 'theme', title: 'Vampire Blood', desc: 'Rouge sang et noir profond', cost: 1500, icon: '🧛' },
+  { id: 'theme-ocean', type: 'theme', title: 'Ocean Abyss', desc: 'Bleu aquatique relaxant', cost: 1800, icon: '🌊' },
+  { id: 'theme-royal', type: 'theme', title: 'Royal Gold', desc: 'Prestige et dorures', cost: 2500, icon: '👑' },
+  { id: 'theme-matrix', type: 'theme', title: 'The Matrix', desc: 'Hacker vert fluorescent', cost: 3000, icon: '💻' },
+  { id: 'theme-sakura', type: 'theme', title: 'Cherry Blossom', desc: 'Doux rose pastel printanier', cost: 4000, icon: '🌸' },
 
   // Avatars
   { id: 'avatar-student', type: 'avatar', title: 'Étudiant Assidu', desc: 'Avatar classique de révision', cost: 0, icon: '🎓' },
@@ -10804,6 +10808,12 @@ const SHOP_ITEMS = [
   { id: 'avatar-robot', type: 'avatar', title: 'IA Réductrice', desc: 'Avatar futuriste', cost: 400, icon: '🤖' },
   { id: 'avatar-ninja', type: 'avatar', title: 'Ninja de la Thermo', desc: 'Rapide et précis', cost: 500, icon: '🥷' },
   { id: 'avatar-king', type: 'avatar', title: 'Roi des Examens', desc: 'Couronne de la réussite', cost: 800, icon: '👑' },
+  { id: 'avatar-alien', type: 'avatar', title: 'Cerveau Galactique', desc: 'Venu d\\'ailleurs', cost: 1200, icon: '👽' },
+  { id: 'avatar-knight', type: 'avatar', title: 'Chevalier Noir', desc: 'Armure impénétrable', cost: 1500, icon: '🛡️' },
+  { id: 'avatar-dragon', type: 'avatar', title: 'Dragon', desc: 'Force mythologique', cost: 2000, icon: '🐉' },
+  { id: 'avatar-astronaut', type: 'avatar', title: 'Astronaute', desc: 'Au-delà des étoiles', cost: 2500, icon: '👨‍🚀' },
+  { id: 'avatar-devil', type: 'avatar', title: 'Démon du QCM', desc: 'Infernal', cost: 3000, icon: '😈' },
+  { id: 'avatar-god', type: 'avatar', title: 'Dieu de la Révision', desc: 'L\\'omniscience pure', cost: 5000, icon: '👁️' },
 
   // Emojis de Duel
   { id: 'emoji-fire', type: 'emoji', title: 'Enflammé', desc: 'Emoji de duel', cost: 0, icon: '🔥' },
@@ -10816,6 +10826,14 @@ const SHOP_ITEMS = [
   { id: 'emoji-exploding', type: 'emoji', title: 'Mind Blown', desc: 'Emoji de duel', cost: 250, icon: '🤯' },
   { id: 'emoji-party', type: 'emoji', title: 'Fête', desc: 'Emoji de duel', cost: 300, icon: '🎉' },
   { id: 'emoji-trophy', type: 'emoji', title: 'Trophée', desc: 'Emoji de duel', cost: 400, icon: '🏆' },
+  { id: 'emoji-clown', type: 'emoji', title: 'Clown', desc: 'Emoji de duel', cost: 450, icon: '🤡' },
+  { id: 'emoji-skull', type: 'emoji', title: 'Skull', desc: 'Emoji de duel', cost: 500, icon: '💀' },
+  { id: 'emoji-nerd', type: 'emoji', title: 'Nerd', desc: 'Emoji de duel', cost: 600, icon: '🤓' },
+  { id: 'emoji-muscle', type: 'emoji', title: 'Muscle', desc: 'Emoji de duel', cost: 800, icon: '💪' },
+  { id: 'emoji-money', type: 'emoji', title: 'Argent', desc: 'Emoji de duel', cost: 1000, icon: '💸' },
+  { id: 'emoji-poop', type: 'emoji', title: 'Caca', desc: 'Emoji de duel', cost: 1500, icon: '💩' },
+  { id: 'emoji-eyes', type: 'emoji', title: 'Yeux', desc: 'Emoji de duel', cost: 2000, icon: '👀' },
+  { id: 'emoji-crown', type: 'emoji', title: 'Couronne', desc: 'Emoji de duel', cost: 3000, icon: '👑' },
 
   // Power-ups
   { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
