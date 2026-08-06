@@ -978,13 +978,19 @@ class AppController {
     const nextBtn = document.getElementById('quiz-next-btn');
     if (nextBtn) nextBtn.style.display = 'none';
 
-    // Inject duel HUD before quiz container
-    const quizContainer = document.getElementById('quiz-question-container');
-    if (quizContainer) {
+    // Inject duel HUD at the top of quiz-view
+    const quizView = document.getElementById('quiz-view');
+    if (quizView) {
       const hudTemplate = document.getElementById('duel-hud-template');
       if (hudTemplate) {
         const hud = hudTemplate.content.cloneNode(true);
-        quizContainer.parentElement.insertBefore(hud, quizContainer);
+        // Insert right after the top bar
+        const topBar = quizView.querySelector('div');
+        if (topBar) {
+          quizView.insertBefore(hud, topBar.nextSibling);
+        } else {
+          quizView.insertBefore(hud, quizView.firstChild);
+        }
       }
     }
 
