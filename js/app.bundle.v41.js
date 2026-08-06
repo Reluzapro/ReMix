@@ -13298,9 +13298,8 @@ class AppController {
       if (modal) modal.classList.add('active');
     });
 
-    safeOn('btn-start-revision', 'click', () => {
-      this.startRevisionQuiz();
-    });
+    const btnStartRev = document.getElementById('btn-start-revision');
+    if (btnStartRev) btnStartRev.onclick = () => this.startRevisionQuiz();
 
     safeOn('quiz-save-exit-btn', 'click', () => this.saveAndExitQuizSession());
     safeOn('btn-resume-banner', 'click', () => this.resumeQuizSession());
@@ -13573,7 +13572,13 @@ class AppController {
           const res = StorageManager.importData(event.target.result);
           if (res.success) {
             alert('Sauvegarde restaurée avec succès !');
-            this.init();
+            // Refresh all views without re-running init (avoids duplicate listeners)
+            this.applyUserTheme();
+            this.updateHeaderStats();
+            this.renderSubjects();
+            this.renderShop();
+            this.renderProfile();
+            this.updatePausedBanner();
           } else {
             alert(`Erreur de restauration : ${res.error}`);
           }
@@ -13682,7 +13687,13 @@ function startApp() {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.remove('active');
       SoundFX.playLevelUp();
-      app.init();
+      // Refresh views without re-running init (avoids duplicate listeners)
+      app.applyUserTheme();
+      app.updateHeaderStats();
+      app.renderSubjects();
+      app.renderShop();
+      app.renderProfile();
+      app.updatePausedBanner();
     }
   });
 
