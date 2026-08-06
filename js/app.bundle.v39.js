@@ -11938,12 +11938,7 @@ class AppController {
       }
 
       if (!matchesCurrentPath) return;
-    const btnStartRev = document.getElementById('btn-start-revision');
-    if (btnStartRev) {
-      btnStartRev.addEventListener('click', () => {
-        this.startRevisionQuiz();
-      });
-    }
+
       if (pathParts.length > currentDepth + 1) {
         const folderName = pathParts[currentDepth];
         if (!subfoldersMap.has(folderName)) {
@@ -13301,6 +13296,10 @@ class AppController {
     safeOn('header-cloud-btn', 'click', () => {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.add('active');
+    });
+
+    safeOn('btn-start-revision', 'click', () => {
+      this.startRevisionQuiz();
     });
 
     safeOn('quiz-save-exit-btn', 'click', () => this.saveAndExitQuizSession());
