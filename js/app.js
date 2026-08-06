@@ -1440,8 +1440,34 @@ class AppController {
     customContainer.querySelectorAll('.btn-redeem').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
+        const reward = profile.customRewards.find(r => r.id === id);
+        if (!reward) return;
+
         const res = GamificationEngine.redeemCustomReward(profile, id);
-        alert(res.message);
+        
+        if (res.success) {
+          const showModal = document.getElementById('modal-show-reward');
+          if (showModal) {
+            document.getElementById('show-reward-title').innerText = `Vous avez débloqué :\n${reward.title}`;
+            const imgContainer = document.getElementById('show-reward-image-container');
+            const imgTag = document.getElementById('show-reward-image');
+            
+            if (reward.image) {
+              imgTag.src = reward.image;
+              imgContainer.style.display = 'block';
+            } else {
+              imgTag.src = '';
+              imgContainer.style.display = 'none';
+            }
+            
+            showModal.classList.add('active');
+          } else {
+            alert(res.message);
+          }
+        } else {
+          alert(res.message);
+        }
+        
         this.updateHeaderStats();
         this.renderShop();
       });

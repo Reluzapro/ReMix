@@ -566,6 +566,18 @@
     </div>
   </div>
 
+  <!-- Modal Show Redeemed Reward -->
+  <div class="modal-overlay" id="modal-show-reward">
+    <div class="modal-card glass-panel" style="max-width: 440px; text-align: center;">
+      <h2 style="font-family: var(--font-title); font-size: 1.8rem; margin-bottom: 0.5rem; color: var(--accent-amber);">Félicitations ! 🎉</h2>
+      <h3 id="show-reward-title" style="margin-bottom: 1.5rem; color: var(--text-primary); font-size: 1.2rem;"></h3>
+      <div id="show-reward-image-container" style="display: none; margin-bottom: 1.5rem;">
+        <img id="show-reward-image" src="" alt="Récompense" style="max-width: 100%; max-height: 300px; object-fit: contain; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid var(--border-color);">
+      </div>
+      <button class="btn-primary" onclick="document.getElementById('modal-show-reward').classList.remove('active')" style="width: 100%;">Génial !</button>
+    </div>
+  </div>
+
   <!-- Modal Pause Quiz -->
   <div class="modal-overlay" id="modal-quiz-pause" style="display: none; visibility: hidden;">
     <div class="modal-card glass-panel" style="max-width: 440px; text-align: center;">
