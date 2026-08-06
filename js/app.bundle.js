@@ -11399,6 +11399,10 @@ class MultiplayerEngine {
       if (callbacks.onPlayerLeftLobby) callbacks.onPlayerLeftLobby(payload.payload);
     });
 
+    channel.on('broadcast', { event: 'player_abandoned' }, (payload) => {
+      if (callbacks.onPlayerAbandoned) callbacks.onPlayerAbandoned(payload.payload);
+    });
+
     channel.on('broadcast', { event: 'battle_finished' }, (payload) => {
       if (callbacks.onBattleFinished) callbacks.onBattleFinished(payload.payload);
     });
@@ -11639,6 +11643,7 @@ class AppController {
   }
 
   init() {
+    this.resolveAbandonedBattles();
     this.applyUserTheme();
     this.updateHeaderStats();
     this.setupNavigation();
@@ -12322,6 +12327,55 @@ class AppController {
     }
   }
 
+  async resolveAbandonedBattles() {
+    const profile = StorageManager.getProfile();
+    const myUsername = profile.cloudAccount?.username || profile.name;
+    const db = MultiplayerEngine._getDB();
+    if (!db) return;
+
+    // Check for battles older than 5 minutes where we were involved
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60000).toISOString();
+
+    const { data: battles } = await db.from('battles')
+      .select('*')
+      .or(`player1_id.eq.${myUsername},player2_id.eq.${myUsername}`)
+      .in('status', ['waiting', 'finished'])
+      .lt('created_at', fiveMinsAgo);
+
+    if (!battles || battles.length === 0) return;
+
+    let claimedBattles = JSON.parse(localStorage.getItem('remix_claimed_battles') || '[]');
+    let resolvedAny = false;
+
+    for (const b of battles) {
+      if (claimedBattles.includes(b.id)) continue;
+      
+      if (!b.player2_id) {
+        // Abandoned matchmaking queue, refund wager
+        if (b.player1_id === myUsername && b.wager > 0) {
+          profile.totalCoinsEarned = (profile.totalCoinsEarned || 0) + b.wager;
+          profile.coins = Math.max(0, profile.totalCoinsEarned - (profile.totalCoinsSpent || 0));
+          resolvedAny = true;
+        }
+        claimedBattles.push(b.id);
+        continue;
+      }
+
+      const myScore = b.player1_id === myUsername ? b.player1_score : b.player2_score;
+      const oppScore = b.player1_id === myUsername ? b.player2_score : b.player1_score;
+
+      // resolveDuel automatically gives the reward to profile
+      MultiplayerEngine.resolveDuel(b.wager || 0, myScore, oppScore);
+      claimedBattles.push(b.id);
+      resolvedAny = true;
+    }
+
+    if (resolvedAny) {
+      localStorage.setItem('remix_claimed_battles', JSON.stringify(claimedBattles));
+      this.updateHeaderStats();
+    }
+  }
+
   // === DUEL METHODS ===
 
   showDuelScreen(screen) {
@@ -12413,9 +12467,19 @@ class AppController {
         if (!this.duelState || this.duelState.started) return;
         alert("L'adversaire s'est déconnecté du salon.");
         MultiplayerEngine.cancelMatchmaking(this.duelState.battleId);
-        this.duelState.channel.unsubscribe();
+        if (this.duelState.channel) this.duelState.channel.unsubscribe();
         this.duelState = null;
         this.showDuelScreen('menu');
+      },
+      onPlayerAbandoned: (data) => {
+        if (!this.duelState || this.duelState.resolved) return;
+        alert("L'adversaire a abandonné le combat !");
+        this.duelState.oppFinished = true;
+        
+        // Force the resolution if we were already waiting
+        if (this.quizEngine.currentSession && this.quizEngine.currentSession.isFinished) {
+          this.resolveDuelAndShowResults();
+        }
       },
       onBattleFinished: (data) => {
         if (!this.duelState || this.duelState.resolved) return;
@@ -12662,6 +12726,17 @@ class AppController {
       this.switchView('duels-view');
       this.showDuelScreen('matchmaking');
       document.getElementById('matchmaking-status-text').textContent = 'En attente de l\'adversaire...';
+      
+      // Dynamic timeout based on remaining time for the opponent
+      const remainingTimeMs = this.quizEngine.currentSession ? (this.quizEngine.currentSession.sessionTimer * 1000) : 180000;
+      const waitTime = Math.max(15000, remainingTimeMs + 5000); // Give them at least 15s, or their timer + 5s
+      
+      setTimeout(() => {
+        if (this.duelState && !this.duelState.resolved) {
+          this.resolveDuelAndShowResults();
+        }
+      }, waitTime);
+      
       return;
     }
 
@@ -13467,10 +13542,16 @@ function startApp() {
   app.init();
 
   window.addEventListener('beforeunload', () => {
-    if (window.appInstance?.duelState && !window.appInstance.duelState.started && window.appInstance.duelState.channel) {
-      MultiplayerEngine.broadcastEvent(window.appInstance.duelState.channel, 'player_left_lobby', {
-        playerNum: window.appInstance.duelState.playerNum
-      });
+    if (window.appInstance?.duelState && window.appInstance.duelState.channel) {
+      if (!window.appInstance.duelState.started) {
+        MultiplayerEngine.broadcastEvent(window.appInstance.duelState.channel, 'player_left_lobby', {
+          playerNum: window.appInstance.duelState.playerNum
+        });
+      } else if (!window.appInstance.duelState.resolved) {
+        MultiplayerEngine.broadcastEvent(window.appInstance.duelState.channel, 'player_abandoned', {
+          playerNum: window.appInstance.duelState.playerNum
+        });
+      }
     }
   });
 
