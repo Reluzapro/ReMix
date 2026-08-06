@@ -9787,6 +9787,11 @@ function mergeProfileData(localProfile, cloudProfile) {
   [...cRewards, ...lRewards].forEach(r => rewardMap.set(r.id, r));
   merged.customRewards = Array.from(rewardMap.values());
 
+  // Union of Unlocked Achievements
+  const lAch = localProfile.unlockedAchievements || [];
+  const cAch = cloudProfile.unlockedAchievements || [];
+  merged.unlockedAchievements = Array.from(new Set([...cAch, ...lAch]));
+
   return merged;
 }
 
@@ -10751,19 +10756,32 @@ const ACHIEVEMENTS = [
 const SHOP_ITEMS = [
   // Themes
   { id: 'theme-cyberpunk', type: 'theme', title: 'Cyberpunk Neon', desc: 'Style sombre néon violet et cyan', cost: 0, icon: '🌆' },
-  { id: 'theme-midnight', type: 'theme', title: 'Midnight Synthwave', desc: 'Ambiance rétro-futuriste bleu profond', cost: 150, icon: '🌃' },
-  { id: 'theme-emerald', type: 'theme', title: 'Emerald Forest', desc: 'Design apaisant vert émeraude et or', cost: 200, icon: '🌲' },
-  { id: 'theme-solar', type: 'theme', title: 'Solar Flare', desc: 'Mode chaud orange et ambre dynamisant', cost: 250, icon: '☀️' },
+  { id: 'theme-midnight', type: 'theme', title: 'Midnight Synthwave', desc: 'Ambiance rétro-futuriste bleu profond', cost: 500, icon: '🌃' },
+  { id: 'theme-emerald', type: 'theme', title: 'Emerald Forest', desc: 'Design apaisant vert émeraude et or', cost: 800, icon: '🌲' },
+  { id: 'theme-solar', type: 'theme', title: 'Solar Flare', desc: 'Mode chaud orange et ambre dynamisant', cost: 1000, icon: '☀️' },
+  { id: 'theme-dracula', type: 'theme', title: 'Vampire Blood', desc: 'Rouge sang et noir profond', cost: 1500, icon: '🧛' },
 
   // Avatars
   { id: 'avatar-student', type: 'avatar', title: 'Étudiant Assidu', desc: 'Avatar classique de révision', cost: 0, icon: '🎓' },
-  { id: 'avatar-wizard', type: 'avatar', title: 'Mage du Savoir', desc: 'Avatar magique', cost: 100, icon: '🧙‍♂️' },
-  { id: 'avatar-robot', type: 'avatar', title: 'IA Réductrice', desc: 'Avatar futuriste', cost: 150, icon: '🤖' },
-  { id: 'avatar-ninja', type: 'avatar', title: 'Ninja de la Thermo', desc: 'Rapide et précis', cost: 200, icon: '🥷' },
+  { id: 'avatar-wizard', type: 'avatar', title: 'Mage du Savoir', desc: 'Avatar magique', cost: 300, icon: '🧙‍♂️' },
+  { id: 'avatar-robot', type: 'avatar', title: 'IA Réductrice', desc: 'Avatar futuriste', cost: 400, icon: '🤖' },
+  { id: 'avatar-ninja', type: 'avatar', title: 'Ninja de la Thermo', desc: 'Rapide et précis', cost: 500, icon: '🥷' },
+  { id: 'avatar-king', type: 'avatar', title: 'Roi des Examens', desc: 'Couronne de la réussite', cost: 800, icon: '👑' },
+
+  // Emojis de Duel
+  { id: 'emoji-fire', type: 'emoji', title: 'Enflammé', desc: 'Emoji de duel', cost: 0, icon: '🔥' },
+  { id: 'emoji-brain', type: 'emoji', title: 'Cerveau', desc: 'Emoji de duel', cost: 0, icon: '🧠' },
+  { id: 'emoji-laugh', type: 'emoji', title: 'Rire', desc: 'Emoji de duel', cost: 0, icon: '😂' },
+  { id: 'emoji-cool', type: 'emoji', title: 'Cool', desc: 'Emoji de duel', cost: 0, icon: '😎' },
+  { id: 'emoji-rocket', type: 'emoji', title: 'Fusée', desc: 'Emoji de duel', cost: 100, icon: '🚀' },
+  { id: 'emoji-lightning', type: 'emoji', title: 'Éclair', desc: 'Emoji de duel', cost: 150, icon: '⚡' },
+  { id: 'emoji-thinking', type: 'emoji', title: 'Réflexion', desc: 'Emoji de duel', cost: 200, icon: '🤔' },
+  { id: 'emoji-exploding', type: 'emoji', title: 'Mind Blown', desc: 'Emoji de duel', cost: 250, icon: '🤯' },
+  { id: 'emoji-party', type: 'emoji', title: 'Fête', desc: 'Emoji de duel', cost: 300, icon: '🎉' },
+  { id: 'emoji-trophy', type: 'emoji', title: 'Trophée', desc: 'Emoji de duel', cost: 400, icon: '🏆' },
 
   // Power-ups
   { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
-
   { id: 'powerup_skip', type: 'powerup', title: 'Joker (Passer)', desc: 'Passe la question sans perdre de streak', cost: 60, icon: '⏭️' }
 ];
 
@@ -10866,7 +10884,7 @@ class GamificationEngine {
     const item = SHOP_ITEMS.find(i => i.id === itemId);
     if (!item) return { success: false, message: 'Article introuvable.' };
 
-    if (profile.purchasedItems.includes(itemId) && (item.type === 'theme' || item.type === 'avatar')) {
+    if (profile.purchasedItems.includes(itemId) && (item.type === 'theme' || item.type === 'avatar' || item.type === 'emoji')) {
       if (item.type === 'theme') {
         profile.theme = itemId;
         StorageManager.saveProfile(profile);
@@ -10875,6 +10893,8 @@ class GamificationEngine {
         profile.avatar = item.icon;
         StorageManager.saveProfile(profile);
         return { success: true, message: `Avatar "${item.title}" équipé !` };
+      } else if (item.type === 'emoji') {
+        return { success: false, message: 'Cet emoji est déjà débloqué.' };
       }
     }
 
@@ -10893,6 +10913,8 @@ class GamificationEngine {
     } else if (item.type === 'avatar') {
       if (!profile.purchasedItems.includes(itemId)) profile.purchasedItems.push(itemId);
       profile.avatar = item.icon;
+    } else if (item.type === 'emoji') {
+      if (!profile.purchasedItems.includes(itemId)) profile.purchasedItems.push(itemId);
     } else if (item.type === 'powerup') {
       profile.inventory[itemId] = (profile.inventory[itemId] || 0) + 1;
     }
@@ -11208,19 +11230,6 @@ class QuizEngine {
 
 
 
-// Duel emojis available to all players (no purchase needed)
-const DUEL_EMOJIS = [
-  { id: 'fire', emoji: '🔥', label: 'Enflammé' },
-  { id: 'brain', emoji: '🧠', label: 'Cerveau' },
-  { id: 'rocket', emoji: '🚀', label: 'Fusée' },
-  { id: 'lightning', emoji: '⚡', label: 'Éclair' },
-  { id: 'trophy', emoji: '🏆', label: 'Trophée' },
-  { id: 'laugh', emoji: '😂', label: 'Rire' },
-  { id: 'cool', emoji: '😎', label: 'Cool' },
-  { id: 'party', emoji: '🎉', label: 'Fête' },
-  { id: 'exploding', emoji: '🤯', label: 'Mind Blown' },
-  { id: 'thinking', emoji: '🤔', label: 'Réflexion' }
-];
 
 class MultiplayerEngine {
   constructor() {
@@ -11643,6 +11652,7 @@ class AppController {
   }
 
   init() {
+    GamificationEngine.checkAchievements(StorageManager.getProfile());
     this.resolveAbandonedBattles();
     this.applyUserTheme();
     this.updateHeaderStats();
@@ -12605,20 +12615,25 @@ class AppController {
     setEl('duel-hud-p2-name', oppName);
     setEl('duel-hud-p2-score', '0');
 
-    // Populate emoji bar
+    // Populate emoji bar from owned/free shop emojis
     const emojiBar = document.getElementById('duel-emoji-bar');
     if (emojiBar) {
       emojiBar.innerHTML = '';
-      DUEL_EMOJIS.forEach(em => {
+      const profile = StorageManager.getProfile();
+      const ownedEmojis = SHOP_ITEMS.filter(item => 
+        item.type === 'emoji' && (item.cost === 0 || profile.purchasedItems.includes(item.id))
+      );
+
+      ownedEmojis.forEach(em => {
         const btn = document.createElement('button');
         btn.className = 'duel-emoji-btn';
-        btn.textContent = em.emoji;
-        btn.title = em.label;
+        btn.textContent = em.icon;
+        btn.title = em.title;
         btn.addEventListener('click', () => {
           if (this.duelState?.channel) {
-            MultiplayerEngine.broadcastEvent(this.duelState.channel, 'emote', { emoji: em.emoji, label: em.label });
+            MultiplayerEngine.broadcastEvent(this.duelState.channel, 'emote', { emoji: em.icon, label: em.title });
             // Show own emote briefly
-            this.displayReceivedEmote(em.emoji, true);
+            this.displayReceivedEmote(em.icon, true);
           }
         });
         emojiBar.appendChild(btn);
@@ -13039,12 +13054,35 @@ class AppController {
 
       const card = document.createElement('div');
       card.className = 'shop-card';
+      let buttonHtml = '';
+      let disabledAttr = '';
+      
+      if (item.type === 'theme' || item.type === 'avatar') {
+        if (isEquipped) {
+          buttonHtml = 'Équipé';
+          disabledAttr = 'disabled';
+        } else if (isOwned) {
+          buttonHtml = 'Équiper';
+        } else {
+          buttonHtml = `Acheter (${item.cost} 🪙)`;
+        }
+      } else if (item.type === 'emoji') {
+        if (isOwned || item.cost === 0) {
+          buttonHtml = 'Débloqué ✓';
+          disabledAttr = 'disabled';
+        } else {
+          buttonHtml = `Acheter (${item.cost} 🪙)`;
+        }
+      } else {
+        buttonHtml = `Acheter (${item.cost} 🪙)`;
+      }
+
       card.innerHTML = `
         <div class="shop-icon">${item.icon}</div>
         <div class="shop-item-title">${item.title}</div>
         <div class="shop-item-desc">${item.desc}</div>
-        <button class="btn-primary btn-buy-shop" data-id="${item.id}" style="width: 100%;" ${isEquipped ? 'disabled' : ''}>
-          ${isEquipped ? 'Équipé' : isOwned ? 'Équiper' : `Acheter (${item.cost} 🪙)`}
+        <button class="btn-primary btn-buy-shop" data-id="${item.id}" style="width: 100%;" ${disabledAttr}>
+          ${buttonHtml}
         </button>
       `;
       catalogContainer.appendChild(card);

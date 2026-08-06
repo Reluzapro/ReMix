@@ -112,6 +112,11 @@ export function mergeProfileData(localProfile, cloudProfile) {
   [...cRewards, ...lRewards].forEach(r => rewardMap.set(r.id, r));
   merged.customRewards = Array.from(rewardMap.values());
 
+  // Union of Unlocked Achievements
+  const lAch = localProfile.unlockedAchievements || [];
+  const cAch = cloudProfile.unlockedAchievements || [];
+  merged.unlockedAchievements = Array.from(new Set([...cAch, ...lAch]));
+
   return merged;
 }
 

@@ -16,19 +16,32 @@ export const ACHIEVEMENTS = [
 export const SHOP_ITEMS = [
   // Themes
   { id: 'theme-cyberpunk', type: 'theme', title: 'Cyberpunk Neon', desc: 'Style sombre néon violet et cyan', cost: 0, icon: '🌆' },
-  { id: 'theme-midnight', type: 'theme', title: 'Midnight Synthwave', desc: 'Ambiance rétro-futuriste bleu profond', cost: 150, icon: '🌃' },
-  { id: 'theme-emerald', type: 'theme', title: 'Emerald Forest', desc: 'Design apaisant vert émeraude et or', cost: 200, icon: '🌲' },
-  { id: 'theme-solar', type: 'theme', title: 'Solar Flare', desc: 'Mode chaud orange et ambre dynamisant', cost: 250, icon: '☀️' },
+  { id: 'theme-midnight', type: 'theme', title: 'Midnight Synthwave', desc: 'Ambiance rétro-futuriste bleu profond', cost: 500, icon: '🌃' },
+  { id: 'theme-emerald', type: 'theme', title: 'Emerald Forest', desc: 'Design apaisant vert émeraude et or', cost: 800, icon: '🌲' },
+  { id: 'theme-solar', type: 'theme', title: 'Solar Flare', desc: 'Mode chaud orange et ambre dynamisant', cost: 1000, icon: '☀️' },
+  { id: 'theme-dracula', type: 'theme', title: 'Vampire Blood', desc: 'Rouge sang et noir profond', cost: 1500, icon: '🧛' },
 
   // Avatars
   { id: 'avatar-student', type: 'avatar', title: 'Étudiant Assidu', desc: 'Avatar classique de révision', cost: 0, icon: '🎓' },
-  { id: 'avatar-wizard', type: 'avatar', title: 'Mage du Savoir', desc: 'Avatar magique', cost: 100, icon: '🧙‍♂️' },
-  { id: 'avatar-robot', type: 'avatar', title: 'IA Réductrice', desc: 'Avatar futuriste', cost: 150, icon: '🤖' },
-  { id: 'avatar-ninja', type: 'avatar', title: 'Ninja de la Thermo', desc: 'Rapide et précis', cost: 200, icon: '🥷' },
+  { id: 'avatar-wizard', type: 'avatar', title: 'Mage du Savoir', desc: 'Avatar magique', cost: 300, icon: '🧙‍♂️' },
+  { id: 'avatar-robot', type: 'avatar', title: 'IA Réductrice', desc: 'Avatar futuriste', cost: 400, icon: '🤖' },
+  { id: 'avatar-ninja', type: 'avatar', title: 'Ninja de la Thermo', desc: 'Rapide et précis', cost: 500, icon: '🥷' },
+  { id: 'avatar-king', type: 'avatar', title: 'Roi des Examens', desc: 'Couronne de la réussite', cost: 800, icon: '👑' },
+
+  // Emojis de Duel
+  { id: 'emoji-fire', type: 'emoji', title: 'Enflammé', desc: 'Emoji de duel', cost: 0, icon: '🔥' },
+  { id: 'emoji-brain', type: 'emoji', title: 'Cerveau', desc: 'Emoji de duel', cost: 0, icon: '🧠' },
+  { id: 'emoji-laugh', type: 'emoji', title: 'Rire', desc: 'Emoji de duel', cost: 0, icon: '😂' },
+  { id: 'emoji-cool', type: 'emoji', title: 'Cool', desc: 'Emoji de duel', cost: 0, icon: '😎' },
+  { id: 'emoji-rocket', type: 'emoji', title: 'Fusée', desc: 'Emoji de duel', cost: 100, icon: '🚀' },
+  { id: 'emoji-lightning', type: 'emoji', title: 'Éclair', desc: 'Emoji de duel', cost: 150, icon: '⚡' },
+  { id: 'emoji-thinking', type: 'emoji', title: 'Réflexion', desc: 'Emoji de duel', cost: 200, icon: '🤔' },
+  { id: 'emoji-exploding', type: 'emoji', title: 'Mind Blown', desc: 'Emoji de duel', cost: 250, icon: '🤯' },
+  { id: 'emoji-party', type: 'emoji', title: 'Fête', desc: 'Emoji de duel', cost: 300, icon: '🎉' },
+  { id: 'emoji-trophy', type: 'emoji', title: 'Trophée', desc: 'Emoji de duel', cost: 400, icon: '🏆' },
 
   // Power-ups
   { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
-
   { id: 'powerup_skip', type: 'powerup', title: 'Joker (Passer)', desc: 'Passe la question sans perdre de streak', cost: 60, icon: '⏭️' }
 ];
 
@@ -131,7 +144,7 @@ export class GamificationEngine {
     const item = SHOP_ITEMS.find(i => i.id === itemId);
     if (!item) return { success: false, message: 'Article introuvable.' };
 
-    if (profile.purchasedItems.includes(itemId) && (item.type === 'theme' || item.type === 'avatar')) {
+    if (profile.purchasedItems.includes(itemId) && (item.type === 'theme' || item.type === 'avatar' || item.type === 'emoji')) {
       if (item.type === 'theme') {
         profile.theme = itemId;
         StorageManager.saveProfile(profile);
@@ -140,6 +153,8 @@ export class GamificationEngine {
         profile.avatar = item.icon;
         StorageManager.saveProfile(profile);
         return { success: true, message: `Avatar "${item.title}" équipé !` };
+      } else if (item.type === 'emoji') {
+        return { success: false, message: 'Cet emoji est déjà débloqué.' };
       }
     }
 
@@ -158,6 +173,8 @@ export class GamificationEngine {
     } else if (item.type === 'avatar') {
       if (!profile.purchasedItems.includes(itemId)) profile.purchasedItems.push(itemId);
       profile.avatar = item.icon;
+    } else if (item.type === 'emoji') {
+      if (!profile.purchasedItems.includes(itemId)) profile.purchasedItems.push(itemId);
     } else if (item.type === 'powerup') {
       profile.inventory[itemId] = (profile.inventory[itemId] || 0) + 1;
     }

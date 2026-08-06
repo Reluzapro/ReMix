@@ -4,7 +4,7 @@ import { QuizEngine } from './quizEngine.js';
 import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS } from './gamification.js';
 import { CSVParser } from './csvParser.js';
 import { SoundFX } from './audio.js';
-import { MultiplayerEngine, DUEL_EMOJIS } from './multiplayer.js';
+import { MultiplayerEngine } from './multiplayer.js';
 
 class AppController {
   constructor() {
@@ -22,6 +22,7 @@ class AppController {
   }
 
   init() {
+    GamificationEngine.checkAchievements(StorageManager.getProfile());
     this.resolveAbandonedBattles();
     this.applyUserTheme();
     this.updateHeaderStats();
@@ -984,20 +985,25 @@ class AppController {
     setEl('duel-hud-p2-name', oppName);
     setEl('duel-hud-p2-score', '0');
 
-    // Populate emoji bar
+    // Populate emoji bar from owned/free shop emojis
     const emojiBar = document.getElementById('duel-emoji-bar');
     if (emojiBar) {
       emojiBar.innerHTML = '';
-      DUEL_EMOJIS.forEach(em => {
+      const profile = StorageManager.getProfile();
+      const ownedEmojis = SHOP_ITEMS.filter(item => 
+        item.type === 'emoji' && (item.cost === 0 || profile.purchasedItems.includes(item.id))
+      );
+
+      ownedEmojis.forEach(em => {
         const btn = document.createElement('button');
         btn.className = 'duel-emoji-btn';
-        btn.textContent = em.emoji;
-        btn.title = em.label;
+        btn.textContent = em.icon;
+        btn.title = em.title;
         btn.addEventListener('click', () => {
           if (this.duelState?.channel) {
-            MultiplayerEngine.broadcastEvent(this.duelState.channel, 'emote', { emoji: em.emoji, label: em.label });
+            MultiplayerEngine.broadcastEvent(this.duelState.channel, 'emote', { emoji: em.icon, label: em.title });
             // Show own emote briefly
-            this.displayReceivedEmote(em.emoji, true);
+            this.displayReceivedEmote(em.icon, true);
           }
         });
         emojiBar.appendChild(btn);
@@ -1418,12 +1424,35 @@ class AppController {
 
       const card = document.createElement('div');
       card.className = 'shop-card';
+      let buttonHtml = '';
+      let disabledAttr = '';
+      
+      if (item.type === 'theme' || item.type === 'avatar') {
+        if (isEquipped) {
+          buttonHtml = 'Équipé';
+          disabledAttr = 'disabled';
+        } else if (isOwned) {
+          buttonHtml = 'Équiper';
+        } else {
+          buttonHtml = `Acheter (${item.cost} 🪙)`;
+        }
+      } else if (item.type === 'emoji') {
+        if (isOwned || item.cost === 0) {
+          buttonHtml = 'Débloqué ✓';
+          disabledAttr = 'disabled';
+        } else {
+          buttonHtml = `Acheter (${item.cost} 🪙)`;
+        }
+      } else {
+        buttonHtml = `Acheter (${item.cost} 🪙)`;
+      }
+
       card.innerHTML = `
         <div class="shop-icon">${item.icon}</div>
         <div class="shop-item-title">${item.title}</div>
         <div class="shop-item-desc">${item.desc}</div>
-        <button class="btn-primary btn-buy-shop" data-id="${item.id}" style="width: 100%;" ${isEquipped ? 'disabled' : ''}>
-          ${isEquipped ? 'Équipé' : isOwned ? 'Équiper' : `Acheter (${item.cost} 🪙)`}
+        <button class="btn-primary btn-buy-shop" data-id="${item.id}" style="width: 100%;" ${disabledAttr}>
+          ${buttonHtml}
         </button>
       `;
       catalogContainer.appendChild(card);

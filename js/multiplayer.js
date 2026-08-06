@@ -2,19 +2,6 @@
 import { StorageManager } from './storage.js';
 import { fetchCloudLeaderboard } from './cloudDB.js';
 
-// Duel emojis available to all players (no purchase needed)
-export const DUEL_EMOJIS = [
-  { id: 'fire', emoji: '🔥', label: 'Enflammé' },
-  { id: 'brain', emoji: '🧠', label: 'Cerveau' },
-  { id: 'rocket', emoji: '🚀', label: 'Fusée' },
-  { id: 'lightning', emoji: '⚡', label: 'Éclair' },
-  { id: 'trophy', emoji: '🏆', label: 'Trophée' },
-  { id: 'laugh', emoji: '😂', label: 'Rire' },
-  { id: 'cool', emoji: '😎', label: 'Cool' },
-  { id: 'party', emoji: '🎉', label: 'Fête' },
-  { id: 'exploding', emoji: '🤯', label: 'Mind Blown' },
-  { id: 'thinking', emoji: '🤔', label: 'Réflexion' }
-];
 
 export class MultiplayerEngine {
   constructor() {
