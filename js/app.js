@@ -2440,7 +2440,8 @@ function startApp() {
   });
 
   // Cloud login modal events
-  safeOn('btn-modal-cloud-login-submit', 'click', async () => {
+  safeOn('form-cloud-login', 'submit', async (e) => {
+    e.preventDefault();
     const emailInput = document.getElementById('modal-cloud-email');
     const userInput = document.getElementById('modal-cloud-user');
     const passInput = document.getElementById('modal-cloud-pass');

@@ -566,15 +566,17 @@
         <button id="tab-cloud-signup" style="flex: 1; padding: 0.5rem; background: none; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Créer un compte</button>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
-        <input type="email" id="modal-cloud-email" autocomplete="email" placeholder="Adresse email" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
-        <input type="text" id="modal-cloud-user" autocomplete="username" placeholder="Pseudo (uniquement pour l'inscription)" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box; display: none;">
-        <input type="password" id="modal-cloud-pass" autocomplete="current-password" placeholder="Mot de passe" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;">
-      </div>
-      <div style="display: flex; gap: 0.75rem; margin-bottom: 0.5rem;">
-        <button id="btn-modal-cloud-login-submit" class="btn-primary" style="flex: 1; padding: 0.85rem; cursor: pointer;">🚀 Se connecter</button>
-        <button id="btn-modal-cloud-skip" onclick="document.getElementById('modal-cloud-login').classList.remove('active')" class="btn-secondary" style="padding: 0.85rem 1.25rem; cursor: pointer;">Plus tard</button>
-      </div>
+      <form id="form-cloud-login">
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+          <input type="email" id="modal-cloud-email" name="email" autocomplete="email" placeholder="Adresse email" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;" required>
+          <input type="text" id="modal-cloud-user" name="username" autocomplete="username" placeholder="Pseudo (uniquement pour l'inscription)" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box; display: none;">
+          <input type="password" id="modal-cloud-pass" name="password" autocomplete="current-password" placeholder="Mot de passe" style="width: 100%; padding: 0.85rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 1rem; box-sizing: border-box;" required>
+        </div>
+        <div style="display: flex; gap: 0.75rem; margin-bottom: 0.5rem;">
+          <button type="submit" id="btn-modal-cloud-login-submit" class="btn-primary" style="flex: 1; padding: 0.85rem; cursor: pointer;">🚀 Se connecter</button>
+          <button type="button" id="btn-modal-cloud-skip" onclick="document.getElementById('modal-cloud-login').classList.remove('active')" class="btn-secondary" style="padding: 0.85rem 1.25rem; cursor: pointer;">Plus tard</button>
+        </div>
+      </form>
       <div style="text-align: center;">
         <button id="btn-modal-cloud-forgot" style="background: none; border: none; color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer;">Mot de passe oublié ?</button>
       </div>
