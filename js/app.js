@@ -7,6 +7,12 @@ import { SoundFX } from './audio.js';
 import { MultiplayerEngine } from './multiplayer.js';
 import { lookupByFriendId, addFriend, getFriends, removeFriend, sendFriendNotification, getMyNotifications, markNotificationRead } from './cloudDB.js';
 
+const safeOn = (id, event, fn) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, fn);
+};
+
+
 class AppController {
   constructor() {
     this.quizEngine = new QuizEngine();
@@ -1991,10 +1997,6 @@ class AppController {
     });
 
     // Quiz Pause & Resume Buttons
-    const safeOn = (id, event, fn) => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener(event, fn);
-    };
 
     safeOn('header-cloud-btn', 'click', () => {
       const modal = document.getElementById('modal-cloud-login');
@@ -2433,10 +2435,7 @@ function startApp() {
     }
   });
 
-  const safeOn = (id, event, fn) => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener(event, fn);
-  };
+
 
   // Show Cloud Login popup on first visit if no account
   const profile = StorageManager.getProfile();
