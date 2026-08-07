@@ -1985,6 +1985,10 @@ class AppController {
     if (btnChangeUser) {
       btnChangeUser.addEventListener('click', () => {
         const profile = StorageManager.getProfile();
+        if (profile.cloudAccount?.username) {
+          alert('Votre pseudo est lié à votre compte cloud et ne peut pas être modifié localement.');
+          return;
+        }
         const newName = prompt('Entrez votre nouveau pseudo :', profile.name);
         if (newName && newName.trim()) {
           profile.name = newName.trim();
