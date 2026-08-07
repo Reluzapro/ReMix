@@ -14367,7 +14367,32 @@ function startApp() {
     }
   });
 
+  if (window.supabase) {
+    window.supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        const modal = document.getElementById('modal-cloud-reset-password');
+        if (modal) modal.classList.add('active');
+      }
+    });
+  }
 
+  safeOn('form-cloud-reset-password', 'submit', async (e) => {
+    e.preventDefault();
+    const newPass = document.getElementById('modal-cloud-new-pass').value;
+    if (!newPass || newPass.length < 6) {
+      alert('Le mot de passe doit faire au moins 6 caractères.');
+      return;
+    }
+    const { error } = await window.supabase.auth.updateUser({ password: newPass });
+    if (error) {
+      alert('Erreur lors de la réinitialisation : ' + error.message);
+    } else {
+      alert('Mot de passe mis à jour avec succès ! Vous pouvez maintenant vous connecter.');
+      document.getElementById('modal-cloud-reset-password').classList.remove('active');
+      const loginModal = document.getElementById('modal-cloud-login');
+      if (loginModal) loginModal.classList.add('active');
+    }
+  });
 
   // Show Cloud Login popup on first visit if no account
   const profile = StorageManager.getProfile();
