@@ -380,7 +380,7 @@ export class StorageManager {
         return { success: false, message: 'Identifiants incorrects.' };
       }
 
-      let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_]/g, '');
+      let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_éèêëàâäôöûüùîïçœæ-]/g, '');
 
       // Try Supabase Cloud first
       const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');

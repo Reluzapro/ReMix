@@ -10475,7 +10475,7 @@ class StorageManager {
         return { success: false, message: 'Identifiants incorrects.' };
       }
 
-      let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_]/g, '');
+      let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_éèêëàâäôöûüùîïçœæ-]/g, '');
 
       // Try Supabase Cloud first
       const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
@@ -14473,7 +14473,7 @@ function startApp() {
   const modalCloudUser = document.getElementById('modal-cloud-user');
   if (modalCloudUser) {
     modalCloudUser.addEventListener('input', (e) => {
-      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_éèêëàâäôöûüùîïçœæ-]/g, '');
     });
   }
 
