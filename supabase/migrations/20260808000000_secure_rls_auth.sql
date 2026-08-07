@@ -96,7 +96,8 @@ CREATE POLICY "Anyone can read waiting public battles" ON battles
 CREATE POLICY "Participants can read battles" ON battles
   FOR SELECT USING (
     player1_id = (SELECT username FROM profiles WHERE id = auth.uid()) OR 
-    player2_id = (SELECT username FROM profiles WHERE id = auth.uid())
+    player2_id = (SELECT username FROM profiles WHERE id = auth.uid()) OR
+    (status = 'waiting' AND is_public = false) -- allow reading to join private
   );
 
 -- Only authenticated users can create battles
@@ -106,11 +107,12 @@ CREATE POLICY "Authenticated users can create battles" ON battles
     player1_id = (SELECT username FROM profiles WHERE id = auth.uid())
   );
 
--- Only participants can update battles
+-- Only participants can update battles, OR someone joining an empty slot
 CREATE POLICY "Participants can update battles" ON battles
   FOR UPDATE USING (
     player1_id = (SELECT username FROM profiles WHERE id = auth.uid()) OR 
-    player2_id = (SELECT username FROM profiles WHERE id = auth.uid())
+    player2_id = (SELECT username FROM profiles WHERE id = auth.uid()) OR
+    (status = 'waiting' AND player2_id IS NULL)
   );
 
 -- Only player1 can delete their own battle
