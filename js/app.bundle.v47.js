@@ -12128,7 +12128,7 @@ class MultiplayerEngine {
     const mapPlayers = new Map();
 
     cloudPlayers.forEach(player => {
-      const profileLike = { ...player, checksumToken: player.checksum_token, stats: { duelWins: player.wins } };
+      const profileLike = { ...player, checksumToken: player.checksum_token, stats: { duelWins: player.wins, duelsPlayed: player.total_duels } };
       const isValid = StorageManager.verifyAntiCheatToken(profileLike);
       if (!isValid) return;
 
