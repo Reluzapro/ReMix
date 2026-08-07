@@ -2484,6 +2484,13 @@ function startApp() {
       alert('Erreur: ' + (res.message || 'Impossible d\'envoyer l\'email.'));
     }
   });
+  // Sanitize username input
+  const modalCloudUser = document.getElementById('modal-cloud-user');
+  if (modalCloudUser) {
+    modalCloudUser.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    });
+  }
 
   // Cloud login modal events
   safeOn('form-cloud-login', 'submit', async (e) => {
