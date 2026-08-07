@@ -272,7 +272,7 @@ export class MultiplayerEngine {
         player2Avatar: profile.avatar || '🎓'
       });
 
-      if (!updated) return { success: false, message: 'Erreur matchmaking.' };
+      if (!updated) return { success: false, message: 'Erreur matchmaking: joinBattle a échoué (vérifier la console pour l\'erreur RLS).' };
       return { success: true, matched: true, battle: updated };
     }
 

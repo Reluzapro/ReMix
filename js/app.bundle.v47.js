@@ -9890,7 +9890,7 @@ async function pushProfileToCloud(username, hashedKey, profile, srsData, subject
     }
 
     // Upsert using the authenticated user's ID as the primary key
-    await db.from('profiles').upsert({
+    const { error } = await db.from('profiles').upsert({
       id: session.user.id,
       username: username.toLowerCase(),
       hashed_key: 'supabase_auth_v2',
@@ -9904,8 +9904,14 @@ async function pushProfileToCloud(username, hashedKey, profile, srsData, subject
       subjects_data: finalSubjects,
       updated_at: Date.now()
     }, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Upsert error:', error);
+      alert('Erreur critique de sauvegarde Cloud: ' + error.message);
+    }
   } catch (e) {
-    console.log('Profile cloud push failed:', e.message);
+    console.error('Profile cloud push failed:', e);
+    alert('Erreur réseau Cloud: ' + e.message);
   }
 }
 
@@ -11843,7 +11849,7 @@ class MultiplayerEngine {
         player2Avatar: profile.avatar || '🎓'
       });
 
-      if (!updated) return { success: false, message: 'Erreur matchmaking.' };
+      if (!updated) return { success: false, message: 'Erreur matchmaking: joinBattle a échoué (vérifier la console pour l\'erreur RLS).' };
       return { success: true, matched: true, battle: updated };
     }
 

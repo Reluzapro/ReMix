@@ -215,7 +215,7 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
     }
 
     // Upsert using the authenticated user's ID as the primary key
-    await db.from('profiles').upsert({
+    const { error } = await db.from('profiles').upsert({
       id: session.user.id,
       username: username.toLowerCase(),
       hashed_key: 'supabase_auth_v2',
@@ -229,8 +229,14 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
       subjects_data: finalSubjects,
       updated_at: Date.now()
     }, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Upsert error:', error);
+      alert('Erreur critique de sauvegarde Cloud: ' + error.message);
+    }
   } catch (e) {
-    console.log('Profile cloud push failed:', e.message);
+    console.error('Profile cloud push failed:', e);
+    alert('Erreur réseau Cloud: ' + e.message);
   }
 }
 
