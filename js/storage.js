@@ -23,6 +23,9 @@ const DEFAULT_PROFILE = {
   coins: 50,
   streak: 0,
   maxStreak: 0,
+  lastLoginDate: null,
+  streakDays: 0,
+  dailyQuests: null,
   lastPlayedDate: null,
   theme: 'theme-cyberpunk',
   purchasedItems: ['theme-cyberpunk', 'avatar-student'],
@@ -41,6 +44,7 @@ const DEFAULT_PROFILE = {
     wrongAnswers: 0,
     skippedAnswers: 0,
     perfectGames: 0,
+    duelsPlayed: 0,
     duelWins: 0,
     duelLosses: 0,
     subjectStats: {}
@@ -78,7 +82,8 @@ function computeAntiCheatToken(profile) {
   const xp = profile.xp || 0;
   const coins = profile.coins || 0;
   const wins = profile.stats?.duelWins || 0;
-  const raw = `${level}:${xp}:${coins}:${wins}:${CHECKSUM_SECRET}`;
+  const played = profile.stats?.duelsPlayed || 0;
+  const raw = `${level}:${xp}:${coins}:${wins}:${played}:${CHECKSUM_SECRET}`;
   let hash = 0;
   for (let i = 0; i < raw.length; i++) {
     const char = raw.charCodeAt(i);
@@ -175,6 +180,9 @@ export class StorageManager {
         xp: profile.xp || 0,
         coins: profile.coins || 0,
         wins: profile.stats?.duelWins || 0,
+        total_duels: profile.stats?.duelsPlayed || 0,
+        streak: profile.streakDays || 0,
+        badges: profile.unlockedAchievements || [],
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
         lastActive: Date.now()

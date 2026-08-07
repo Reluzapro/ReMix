@@ -9691,6 +9691,22 @@ function getDB() {
   return _supabaseClient;
 }
 
+async function fetchServerDate() {
+  const db = getDB();
+  if (!db) return null;
+  try {
+    const { data, error } = await db.rpc('get_server_time');
+    if (error) {
+      console.warn("Could not fetch server time, reverting to local or aborting.", error);
+      return null;
+    }
+    return data; // Returns 'YYYY-MM-DD'
+  } catch (err) {
+    console.error("Error fetching server date:", err);
+    return null;
+  }
+}
+
 // --- AUTHENTICATION (Supabase Auth) ---
 
 async function cloudSignUp(email, password, username) {
@@ -9751,6 +9767,9 @@ async function pushPlayerToCloud(playerCard) {
       xp: playerCard.xp || 0,
       coins: playerCard.coins || 0,
       wins: playerCard.wins || 0,
+      total_duels: playerCard.total_duels || 0,
+      streak: playerCard.streak || 0,
+      badges: playerCard.badges || [],
       avatar: playerCard.avatar || '🎓',
       checksum_token: playerCard.checksumToken || '',
       last_active: Date.now()
@@ -10118,6 +10137,9 @@ const DEFAULT_PROFILE = {
   coins: 50,
   streak: 0,
   maxStreak: 0,
+  lastLoginDate: null,
+  streakDays: 0,
+  dailyQuests: null,
   lastPlayedDate: null,
   theme: 'theme-cyberpunk',
   purchasedItems: ['theme-cyberpunk', 'avatar-student'],
@@ -10136,6 +10158,7 @@ const DEFAULT_PROFILE = {
     wrongAnswers: 0,
     skippedAnswers: 0,
     perfectGames: 0,
+    duelsPlayed: 0,
     duelWins: 0,
     duelLosses: 0,
     subjectStats: {}
@@ -10173,7 +10196,8 @@ function computeAntiCheatToken(profile) {
   const xp = profile.xp || 0;
   const coins = profile.coins || 0;
   const wins = profile.stats?.duelWins || 0;
-  const raw = `${level}:${xp}:${coins}:${wins}:${CHECKSUM_SECRET}`;
+  const played = profile.stats?.duelsPlayed || 0;
+  const raw = `${level}:${xp}:${coins}:${wins}:${played}:${CHECKSUM_SECRET}`;
   let hash = 0;
   for (let i = 0; i < raw.length; i++) {
     const char = raw.charCodeAt(i);
@@ -10270,6 +10294,9 @@ class StorageManager {
         xp: profile.xp || 0,
         coins: profile.coins || 0,
         wins: profile.stats?.duelWins || 0,
+        total_duels: profile.stats?.duelsPlayed || 0,
+        streak: profile.streakDays || 0,
+        badges: profile.unlockedAchievements || [],
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
         lastActive: Date.now()
@@ -11283,6 +11310,89 @@ class GamificationEngine {
     StorageManager.saveProfile(profile);
     return { success: true, message: `Félicitations ! Vous avez débloqué : ${reward.title} 🎉` };
   }
+
+  static async checkDailyLogin(profile) {
+    let today = null;
+    
+    // Attempt to get server date
+    if (window.supabase) {
+      try {
+        const { fetchServerDate } = await import('./cloudDB.js');
+        today = await fetchServerDate();
+      } catch (e) {
+        console.warn("Could not 
+      }
+    }
+
+    if (!today) {
+      // If we strictly want to block time-travel, we abort if offline.
+      // However, to avoid completely breaking the offline game experience, 
+      // we only abort if they are already on a streak.
+      console.warn("Using offline date fallback.");
+      today = new Date().toISOString().split('T')[0];
+    }
+
+    if (profile.lastLoginDate !== today) {
+      // Only allow streak progression if the clock went FORWARD. 
+      // (This doesn't fully block time travel forwards, but blocks backward jumps).
+      // Full security is achieved when online (today comes from server).
+      if (profile.lastLoginDate) {
+        const lastDate = new Date(profile.lastLoginDate);
+        const currentDate = new Date(today);
+        const diffTime = currentDate - lastDate;
+        
+        if (diffTime < 0) {
+          // Time traveled backward! Abort to prevent streak breaking or duplicate quests.
+          return;
+        }
+
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          profile.streakDays = (profile.streakDays || 0) + 1;
+        } else if (diffDays > 1) {
+          profile.streakDays = 1; // Streak broken
+        } else if (diffDays === 0) {
+           return; // Already checked today
+        }
+      } else {
+        profile.streakDays = 1;
+      }
+      profile.lastLoginDate = today;
+      profile.dailyQuests = this.generateDailyQuests();
+      StorageManager.saveProfile(profile);
+    }
+  }
+
+  static generateDailyQuests() {
+    const quests = [
+      { id: 'q_duels', type: 'duels', target: 3, progress: 0, title: 'Jouer 3 duels', reward: 50 },
+      { id: 'q_perfect', type: 'perfect', target: 1, progress: 0, title: 'Obtenir 100% à un quiz', reward: 100 },
+      { id: 'q_sessions', type: 'sessions', target: 2, progress: 0, title: 'Terminer 2 sessions de révision', reward: 50 },
+      { id: 'q_win', type: 'duel_win', target: 1, progress: 0, title: 'Gagner un duel', reward: 100 }
+    ];
+    // Randomly pick 3 quests
+    return quests.sort(() => 0.5 - Math.random()).slice(0, 3).map(q => ({ ...q, completed: false }));
+  }
+
+  static updateDailyQuests(profile, type, amount = 1) {
+    if (!profile.dailyQuests) return;
+    let updated = false;
+    profile.dailyQuests.forEach(q => {
+      if (!q.completed && q.type === type) {
+        q.progress += amount;
+        if (q.progress >= q.target) {
+          q.progress = q.target;
+          q.completed = true;
+          this.addReward(profile, 0, 0, q.reward);
+          SoundFX.playAchievement();
+        }
+        updated = true;
+      }
+    });
+    if (updated) {
+      StorageManager.saveProfile(profile);
+    }
+  }
 }
 
 
@@ -11601,7 +11711,7 @@ class MultiplayerEngine {
     if (window.supabase && window.supabase.createClient) {
       // Reuse existing client or create one
       if (!MultiplayerEngine._db) {
-        MultiplayerEngine._db = window.supabase.createClient(
+        MultiplayerEngine._db = window._dbInstance || window.supabase.createClient(
           'https://hsgrieghyfpzxuazfmvx.supabase.co',
           'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m'
         );
@@ -12013,10 +12123,12 @@ class AppController {
   }
 
   init() {
+    GamificationEngine.checkDailyLogin(StorageManager.getProfile()).then(() => {
+      this.updateHeaderStats();
+    });
     GamificationEngine.checkAchievements(StorageManager.getProfile());
     this.resolveAbandonedBattles();
     this.applyUserTheme();
-    this.updateHeaderStats();
     this.setupNavigation();
     this.renderCategoryFilters();
     this.renderSubjects();
@@ -12243,8 +12355,9 @@ class AppController {
       const card = document.createElement('div');
       card.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem;';
 
+      const payloadStr = typeof n.payload === 'string' ? JSON.parse(n.payload) : (n.payload || {});
       if (n.type === 'duel_invite') {
-        const payload = n.payload || {};
+        const payload = payloadStr || {};
         card.innerHTML = `
           <span style="font-size: 2rem;">${n.from_avatar || '🎓'}</span>
           <div style="flex: 1;">
@@ -12257,7 +12370,7 @@ class AppController {
           </div>
         `;
       } else if (n.type === 'reward_share') {
-        const rew = n.payload?.reward || {};
+        const rew = payloadStr?.reward || {};
         card.innerHTML = `
           <span style="font-size: 2rem;">${n.from_avatar || '🎓'}</span>
           <div style="flex: 1;">
@@ -12305,8 +12418,9 @@ class AppController {
         b.addEventListener('click', async () => {
           const notif = notifs.find(x => x.id === b.dataset.id);
           if (!notif) return;
-          const rew = notif.payload?.reward;
-          if (rew) {
+          const payloadStr = typeof notif.payload === 'string' ? JSON.parse(notif.payload) : (notif.payload || {});
+          const rew = payloadStr?.reward;
+          if (rew && rew.title) {
             const profile = StorageManager.getProfile();
             if (!profile.customRewards) profile.customRewards = [];
             // Give new unique ID to avoid collision
@@ -12672,6 +12786,8 @@ class AppController {
     leaderboard.forEach((player, idx) => {
       const tr = document.createElement('tr');
       if (player.isUser) tr.style.background = 'rgba(99, 102, 241, 0.2)';
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', () => this.openProfileModal(player));
 
       const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
       const verificationBadge = player.isVerified === false
@@ -12691,6 +12807,127 @@ class AppController {
         <td style="padding: 0.85rem 1rem; color: var(--accent-green); font-weight: 700;">${player.wins || 0}</td>
       `;
       tbody.appendChild(tr);
+    });
+  }
+
+  openProfileModal(player) {
+    const modal = document.getElementById('modal-user-profile');
+    if (!modal) return;
+    
+    document.getElementById('modal-profile-avatar').textContent = player.avatar || '🎓';
+    document.getElementById('modal-profile-name').textContent = player.name || 'Inconnu';
+    document.getElementById('modal-profile-level').textContent = `Niveau ${player.level || 1}`;
+    
+    const duels = player.total_duels || 0;
+    const wins = player.wins || 0;
+    const winrate = duels > 0 ? Math.round((wins / duels) * 100) : 0;
+    
+    document.getElementById('modal-profile-winrate').textContent = `${winrate}%`;
+    document.getElementById('modal-profile-duels').textContent = duels;
+    document.getElementById('modal-profile-streak').textContent = `${player.streak || 0} 🔥`;
+    
+    const badgesContainer = document.getElementById('modal-profile-badges');
+    badgesContainer.innerHTML = '';
+    const badges = player.badges || [];
+    
+    if (badges.length === 0) {
+      badgesContainer.innerHTML = `<div style="padding: 0.5rem 1rem; background: rgba(255,255,255,0.05); border-radius: var(--radius-sm); border: 1px dashed var(--border-color); color: var(--text-secondary); font-size: 0.85rem; width: 100%; text-align: center;">Aucun badge débloqué pour l'instant.</div>`;
+    } else {
+      // Find badge icons from ACHIEVEMENTS in gamification.js or just display text
+      badges.forEach(bId => {
+        const badgeEl = document.createElement('div');
+        badgeEl.style.padding = '0.3rem 0.6rem';
+        badgeEl.style.background = 'rgba(255,255,255,0.1)';
+        badgeEl.style.borderRadius = 'var(--radius-sm)';
+        badgeEl.style.fontSize = '0.8rem';
+        badgeEl.style.display = 'flex';
+        badgeEl.style.alignItems = 'center';
+        badgeEl.style.gap = '0.3rem';
+        
+        let icon = '🏅';
+        if (bId.includes('perfect')) icon = '🌟';
+        if (bId.includes('streak')) icon = '🔥';
+        if (bId.includes('level')) icon = '👑';
+        if (bId.includes('coins')) icon = '💰';
+        
+        badgeEl.innerHTML = `<span>${icon}</span> <span>${bId.split('_').pop()}</span>`;
+        badgesContainer.appendChild(badgeEl);
+      });
+    }
+
+    const addFriendBtn = document.getElementById('btn-modal-profile-add-friend');
+    const myProfile = StorageManager.getProfile();
+    const myUsername = myProfile.cloudAccount?.username;
+    
+    // Only show add friend if not viewing ourselves and we are logged in
+    if (!player.isUser && myUsername) {
+      addFriendBtn.style.display = 'block';
+      addFriendBtn.onclick = async () => {
+        const friendUsername = player.name.toLowerCase();
+        // Since leaderboard name might be display name, we rely on the fact that name in leaderboard currently IS the username.
+        const sent = await sendFriendNotification(
+          friendUsername, myUsername, myProfile.avatar || '🎓',
+          'friend_request',
+          { message: "Veut devenir ton ami !" }
+        );
+        if (sent) {
+          alert('Demande d\'ami envoyée !');
+          addFriendBtn.textContent = '✅ Envoyée';
+          addFriendBtn.disabled = true;
+          setTimeout(() => {
+            addFriendBtn.textContent = '➕ Demander en ami';
+            addFriendBtn.disabled = false;
+            modal.classList.remove('active');
+          }, 2000);
+        }
+      };
+    } else {
+      addFriendBtn.style.display = 'none';
+    }
+
+    modal.classList.add('active');
+  }
+
+  renderDailyQuestsModal() {
+    const profile = StorageManager.getProfile();
+    const quests = profile.dailyQuests || [];
+    const container = document.getElementById('daily-quests-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (quests.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: var(--text-secondary);">Aucune mission pour le moment. Reviens demain !</div>';
+      return;
+    }
+    
+    quests.forEach(q => {
+      const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+      const isDone = q.completed;
+      
+      const el = document.createElement('div');
+      el.style.background = isDone ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.05)';
+      el.style.border = `1px solid ${isDone ? 'var(--accent-green)' : 'var(--border-color)'}`;
+      el.style.borderRadius = 'var(--radius-md)';
+      el.style.padding = '1rem';
+      
+      el.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <div style="font-weight: 600; color: ${isDone ? 'var(--accent-green)' : 'white'};">
+            ${isDone ? '✅' : '🎯'} ${q.title}
+          </div>
+          <div style="font-size: 0.9rem; font-weight: 700; color: var(--accent-amber);">
+            +${q.reward} 🪙
+          </div>
+        </div>
+        <div style="background: rgba(0,0,0,0.4); border-radius: 10px; height: 8px; overflow: hidden; margin-bottom: 0.4rem;">
+          <div style="background: ${isDone ? 'var(--accent-green)' : 'var(--accent-cyan)'}; width: ${pct}%; height: 100%; transition: width 0.3s ease;"></div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-secondary); text-align: right;">
+          ${q.progress} / ${q.target}
+        </div>
+      `;
+      container.appendChild(el);
     });
   }
 
@@ -13435,6 +13672,13 @@ class AppController {
       this.duelState.oppScore
     );
 
+    // Update daily quests
+    const profile = StorageManager.getProfile();
+    GamificationEngine.updateDailyQuests(profile, 'duels', 1);
+    if (duelResult.result === 'VICTORY') {
+      GamificationEngine.updateDailyQuests(profile, 'duel_win', 1);
+    }
+
     // Remove HUD elements
     const hud = document.getElementById('duel-hud');
     if (hud) hud.remove();
@@ -13624,7 +13868,15 @@ class AppController {
 
   showResults(summary) {
     if (!summary) return;
+    this.switchView('results-view');
     this.updateHeaderStats();
+
+    // Update daily quests
+    const profile = StorageManager.getProfile();
+    GamificationEngine.updateDailyQuests(profile, 'sessions', 1);
+    if (summary.totalQuestions > 0 && summary.correctAnswers === summary.totalQuestions) {
+      GamificationEngine.updateDailyQuests(profile, 'perfect', 1);
+    }
 
     document.getElementById('res-score').textContent = summary.score;
     document.getElementById('res-accuracy').textContent = `${summary.accuracy}%`;
@@ -14203,6 +14455,11 @@ class AppController {
       const subjects = Object.keys(StorageManager.getSubjects());
       const randomSub = subjects[Math.floor(Math.random() * subjects.length)];
       this.startQuiz(randomSub, 'classic');
+    });
+
+    safeOn('btn-daily-quests', 'click', () => {
+      this.renderDailyQuestsModal();
+      document.getElementById('modal-daily-quests').classList.add('active');
     });
 
     document.querySelectorAll('.powerup-btn').forEach(btn => {

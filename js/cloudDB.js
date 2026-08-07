@@ -16,6 +16,22 @@ export function getDB() {
   return _supabaseClient;
 }
 
+export async function fetchServerDate() {
+  const db = getDB();
+  if (!db) return null;
+  try {
+    const { data, error } = await db.rpc('get_server_time');
+    if (error) {
+      console.warn("Could not fetch server time, reverting to local or aborting.", error);
+      return null;
+    }
+    return data; // Returns 'YYYY-MM-DD'
+  } catch (err) {
+    console.error("Error fetching server date:", err);
+    return null;
+  }
+}
+
 // --- AUTHENTICATION (Supabase Auth) ---
 
 export async function cloudSignUp(email, password, username) {
@@ -76,6 +92,9 @@ export async function pushPlayerToCloud(playerCard) {
       xp: playerCard.xp || 0,
       coins: playerCard.coins || 0,
       wins: playerCard.wins || 0,
+      total_duels: playerCard.total_duels || 0,
+      streak: playerCard.streak || 0,
+      badges: playerCard.badges || [],
       avatar: playerCard.avatar || '🎓',
       checksum_token: playerCard.checksumToken || '',
       last_active: Date.now()

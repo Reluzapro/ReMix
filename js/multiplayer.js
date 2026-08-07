@@ -22,7 +22,7 @@ export class MultiplayerEngine {
     if (window.supabase && window.supabase.createClient) {
       // Reuse existing client or create one
       if (!MultiplayerEngine._db) {
-        MultiplayerEngine._db = window.supabase.createClient(
+        MultiplayerEngine._db = window._dbInstance || window.supabase.createClient(
           'https://hsgrieghyfpzxuazfmvx.supabase.co',
           'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m'
         );

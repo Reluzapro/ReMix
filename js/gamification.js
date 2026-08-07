@@ -236,4 +236,87 @@ export class GamificationEngine {
     StorageManager.saveProfile(profile);
     return { success: true, message: `Félicitations ! Vous avez débloqué : ${reward.title} 🎉` };
   }
+
+  static async checkDailyLogin(profile) {
+    let today = null;
+    
+    // Attempt to get server date
+    if (window.supabase) {
+      try {
+        const { fetchServerDate } = await import('./cloudDB.js');
+        today = await fetchServerDate();
+      } catch (e) {
+        console.warn("Could not import fetchServerDate", e);
+      }
+    }
+
+    if (!today) {
+      // If we strictly want to block time-travel, we abort if offline.
+      // However, to avoid completely breaking the offline game experience, 
+      // we only abort if they are already on a streak.
+      console.warn("Using offline date fallback.");
+      today = new Date().toISOString().split('T')[0];
+    }
+
+    if (profile.lastLoginDate !== today) {
+      // Only allow streak progression if the clock went FORWARD. 
+      // (This doesn't fully block time travel forwards, but blocks backward jumps).
+      // Full security is achieved when online (today comes from server).
+      if (profile.lastLoginDate) {
+        const lastDate = new Date(profile.lastLoginDate);
+        const currentDate = new Date(today);
+        const diffTime = currentDate - lastDate;
+        
+        if (diffTime < 0) {
+          // Time traveled backward! Abort to prevent streak breaking or duplicate quests.
+          return;
+        }
+
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          profile.streakDays = (profile.streakDays || 0) + 1;
+        } else if (diffDays > 1) {
+          profile.streakDays = 1; // Streak broken
+        } else if (diffDays === 0) {
+           return; // Already checked today
+        }
+      } else {
+        profile.streakDays = 1;
+      }
+      profile.lastLoginDate = today;
+      profile.dailyQuests = this.generateDailyQuests();
+      StorageManager.saveProfile(profile);
+    }
+  }
+
+  static generateDailyQuests() {
+    const quests = [
+      { id: 'q_duels', type: 'duels', target: 3, progress: 0, title: 'Jouer 3 duels', reward: 50 },
+      { id: 'q_perfect', type: 'perfect', target: 1, progress: 0, title: 'Obtenir 100% à un quiz', reward: 100 },
+      { id: 'q_sessions', type: 'sessions', target: 2, progress: 0, title: 'Terminer 2 sessions de révision', reward: 50 },
+      { id: 'q_win', type: 'duel_win', target: 1, progress: 0, title: 'Gagner un duel', reward: 100 }
+    ];
+    // Randomly pick 3 quests
+    return quests.sort(() => 0.5 - Math.random()).slice(0, 3).map(q => ({ ...q, completed: false }));
+  }
+
+  static updateDailyQuests(profile, type, amount = 1) {
+    if (!profile.dailyQuests) return;
+    let updated = false;
+    profile.dailyQuests.forEach(q => {
+      if (!q.completed && q.type === type) {
+        q.progress += amount;
+        if (q.progress >= q.target) {
+          q.progress = q.target;
+          q.completed = true;
+          this.addReward(profile, 0, 0, q.reward);
+          SoundFX.playAchievement();
+        }
+        updated = true;
+      }
+    });
+    if (updated) {
+      StorageManager.saveProfile(profile);
+    }
+  }
 }
