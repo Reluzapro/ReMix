@@ -12,6 +12,15 @@ export const ACHIEVEMENTS = [
   { id: 'ach_shop_buy', title: '🛍️ Client VIP', desc: 'Acheter un élément dans la boutique.', icon: '💎' },
   { id: 'ach_custom_subject', title: '📝 Professeur', desc: 'Importer votre propre cours via CSV.', icon: '📚' }
 ];
+export const EXCLUSIVE_EMOJIS = [
+  { id: 'emoji_time_1', emoji: '📅', label: 'Calendrier' },
+  { id: 'emoji_time_2', emoji: '⏳', label: 'Sablier' },
+  { id: 'emoji_time_3', emoji: '⏰', label: 'Réveil' },
+  { id: 'emoji_time_4', emoji: '🌙', label: 'Lune' },
+  { id: 'emoji_time_5', emoji: '☀️', label: 'Soleil' },
+  { id: 'emoji_time_6', emoji: '🕰️', label: 'Horloge' },
+  { id: 'emoji_time_7', emoji: '🗓️', label: 'Éphéméride' }
+];
 
 export const SHOP_ITEMS = [
   // Themes
@@ -278,15 +287,65 @@ export class GamificationEngine {
         } else if (diffDays > 1) {
           profile.streakDays = 1; // Streak broken
         } else if (diffDays === 0) {
-           return; // Already checked today
+           return null; // Already checked today
         }
       } else {
         profile.streakDays = 1;
       }
+      
+      const loginReward = this.getDailyLoginReward(profile);
       profile.lastLoginDate = today;
       profile.dailyQuests = this.generateDailyQuests();
       StorageManager.saveProfile(profile);
+      return loginReward;
     }
+    return null;
+  }
+
+  static getDailyLoginReward(profile) {
+    const day = ((profile.streakDays - 1) % 7) + 1;
+    let rewardText = '';
+    
+    // Ensure nested objects exist
+    if (!profile.inventory) profile.inventory = {};
+    if (!profile.purchasedItems) profile.purchasedItems = [];
+    
+    if (day === 1) {
+      profile.totalCoinsEarned = (profile.totalCoinsEarned || profile.coins) + 20;
+      profile.coins += 20;
+      rewardText = '+20 Pièces 🪙';
+    } else if (day === 2) {
+      profile.inventory.powerup_fifty = (profile.inventory.powerup_fifty || 0) + 1;
+      rewardText = '+1 Jocker 50/50 ⚖️';
+    } else if (day === 3) {
+      profile.xp = (profile.xp || 0) + 20;
+      rewardText = '+20 XP 🌟';
+    } else if (day === 4) {
+      profile.inventory.powerup_skip = (profile.inventory.powerup_skip || 0) + 1;
+      rewardText = '+1 Passe-question ⏭️';
+    } else if (day === 5) {
+      profile.totalCoinsEarned = (profile.totalCoinsEarned || profile.coins) + 100;
+      profile.coins += 100;
+      rewardText = '+100 Pièces 🪙';
+    } else if (day === 6) {
+      profile.inventory.powerup_fifty = (profile.inventory.powerup_fifty || 0) + 2;
+      profile.inventory.powerup_skip = (profile.inventory.powerup_skip || 0) + 1;
+      rewardText = '+2 Jockers 50/50 ⚖️ et +1 Passe ⏭️';
+    } else if (day === 7) {
+      // Find first not owned
+      const toUnlock = EXCLUSIVE_EMOJIS.find(e => !profile.purchasedItems.includes(e.id));
+      if (toUnlock) {
+        profile.purchasedItems.push(toUnlock.id);
+        rewardText = `Emoji exclusif: ${toUnlock.emoji} (${toUnlock.label})`;
+      } else {
+        // Fallback if all unlocked
+        profile.totalCoinsEarned = (profile.totalCoinsEarned || profile.coins) + 200;
+        profile.coins += 200;
+        rewardText = '+200 Pièces 🪙 (Tous les emojis débloqués !)';
+      }
+    }
+
+    return { day, rewardText, streak: profile.streakDays };
   }
 
   static generateDailyQuests() {

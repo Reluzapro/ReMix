@@ -1,7 +1,7 @@
 // Main application controller linking UI, QuizEngine, Gamification, Storage, Audio, and Multiplayer
 import { StorageManager } from './storage.js';
 import { QuizEngine } from './quizEngine.js';
-import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS } from './gamification.js';
+import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS, EXCLUSIVE_EMOJIS } from './gamification.js';
 import { CSVParser } from './csvParser.js';
 import { SoundFX } from './audio.js';
 import { MultiplayerEngine } from './multiplayer.js';
@@ -29,8 +29,11 @@ class AppController {
   }
 
   init() {
-    GamificationEngine.checkDailyLogin(StorageManager.getProfile()).then(() => {
+    GamificationEngine.checkDailyLogin(StorageManager.getProfile()).then((loginReward) => {
       this.updateHeaderStats();
+      if (loginReward) {
+        this.showDailyRewardPopup(loginReward);
+      }
     });
     GamificationEngine.checkAchievements(StorageManager.getProfile());
     this.resolveAbandonedBattles();
@@ -904,6 +907,48 @@ class AppController {
     }
   }
 
+  showDailyRewardPopup(rewardData) {
+    document.getElementById('daily-reward-day').textContent = rewardData.streak;
+    document.getElementById('daily-reward-text').textContent = rewardData.rewardText;
+
+    const dayInWeek = rewardData.day; // 1 to 7
+    const dotsContainer = document.getElementById('daily-reward-dots');
+    dotsContainer.innerHTML = '';
+
+    for (let i = 1; i <= 7; i++) {
+      const dot = document.createElement('div');
+      dot.style.width = '14px';
+      dot.style.height = '14px';
+      dot.style.borderRadius = '50%';
+      dot.style.background = i <= dayInWeek ? 'var(--accent-amber)' : 'rgba(255,255,255,0.2)';
+      dot.style.boxShadow = i === dayInWeek ? '0 0 10px var(--accent-amber)' : 'none';
+      dot.style.position = 'relative';
+      dot.style.zIndex = '3';
+      
+      const label = document.createElement('div');
+      label.textContent = `J${i}`;
+      label.style.position = 'absolute';
+      label.style.top = '20px';
+      label.style.left = '50%';
+      label.style.transform = 'translateX(-50%)';
+      label.style.fontSize = '0.7rem';
+      label.style.color = i <= dayInWeek ? 'var(--text-light)' : 'rgba(255,255,255,0.5)';
+      
+      dot.appendChild(label);
+      dotsContainer.appendChild(dot);
+    }
+
+    setTimeout(() => {
+      const progressBar = document.getElementById('daily-reward-progress-bar');
+      if (progressBar) {
+        const percentage = ((dayInWeek - 1) / 6) * 100;
+        progressBar.style.width = `${percentage}%`;
+      }
+    }, 100);
+
+    document.getElementById('modal-daily-reward').classList.add('active');
+  }
+
   startQuiz(subjectId, mode = 'classic', force = false) {
     const paused = StorageManager.getPausedSession();
     if (paused && !force) {
@@ -1412,16 +1457,23 @@ class AppController {
     setEl('duel-hud-p2-name', oppName);
     setEl('duel-hud-p2-score', '0');
 
-    // Populate emoji bar from owned/free shop emojis
+    // Populate emoji bar from owned/free shop emojis and exclusive emojis
     const emojiBar = document.getElementById('duel-emoji-bar');
     if (emojiBar) {
       emojiBar.innerHTML = '';
       const profile = StorageManager.getProfile();
-      const ownedEmojis = SHOP_ITEMS.filter(item => 
+      
+      const ownedShopEmojis = SHOP_ITEMS.filter(item => 
         item.type === 'emoji' && (item.cost === 0 || profile.purchasedItems.includes(item.id))
       );
+      
+      const ownedExclusiveEmojis = EXCLUSIVE_EMOJIS.filter(item =>
+        profile.purchasedItems.includes(item.id)
+      ).map(item => ({ icon: item.emoji, title: item.label }));
+      
+      const allOwnedEmojis = [...ownedShopEmojis, ...ownedExclusiveEmojis];
 
-      ownedEmojis.forEach(em => {
+      allOwnedEmojis.forEach(em => {
         const btn = document.createElement('button');
         btn.className = 'duel-emoji-btn';
         btn.textContent = em.icon;
