@@ -86,6 +86,12 @@ export async function pushPlayerToCloud(playerCard) {
   try {
     const db = getDB();
     if (!db) return;
+    
+    // Do not attempt to push if the user is a guest (no active session),
+    // to avoid console 403 Forbidden errors from the RLS policies.
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return;
+
     await db.from('leaderboard').upsert({
       name: (playerCard.cloudAccount?.username || playerCard.name).toLowerCase(),
       level: playerCard.level || 1,
