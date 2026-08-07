@@ -4,7 +4,7 @@ const SUPABASE_KEY = 'sb_publishable_bborZn7bk6huf--BanH2pg___DL_98m';
 
 let _supabaseClient = null;
 
-function getDB() {
+export function getDB() {
   if (_supabaseClient) return _supabaseClient;
   try {
     if (window.supabase && window.supabase.createClient) {
@@ -14,6 +14,54 @@ function getDB() {
     console.log('Supabase init failed:', e.message);
   }
   return _supabaseClient;
+}
+
+// --- AUTHENTICATION (Supabase Auth) ---
+
+export async function cloudSignUp(email, password, username) {
+  const db = getDB();
+  if (!db) throw new Error("Supabase non initialisé.");
+  const { data, error } = await db.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { username: username }
+    }
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function cloudSignIn(email, password) {
+  const db = getDB();
+  if (!db) throw new Error("Supabase non initialisé.");
+  const { data, error } = await db.auth.signInWithPassword({
+    email,
+    password
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function cloudResetPassword(email) {
+  const db = getDB();
+  if (!db) throw new Error("Supabase non initialisé.");
+  const { error } = await db.auth.resetPasswordForEmail(email);
+  if (error) throw error;
+  return true;
+}
+
+export async function cloudSignOut() {
+  const db = getDB();
+  if (!db) return;
+  await db.auth.signOut();
+}
+
+export async function getCloudUser() {
+  const db = getDB();
+  if (!db) return null;
+  const { data: { user } } = await db.auth.getUser();
+  return user;
 }
 
 // --- LEADERBOARD ---

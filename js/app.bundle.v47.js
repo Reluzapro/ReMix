@@ -9691,6 +9691,54 @@ function getDB() {
   return _supabaseClient;
 }
 
+// --- AUTHENTICATION (Supabase Auth) ---
+
+async function cloudSignUp(email, password, username) {
+  const db = getDB();
+  if (!db) throw new Error("Supabase non initialisé.");
+  const { data, error } = await db.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { username: username }
+    }
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function cloudSignIn(email, password) {
+  const db = getDB();
+  if (!db) throw new Error("Supabase non initialisé.");
+  const { data, error } = await db.auth.signInWithPassword({
+    email,
+    password
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function cloudResetPassword(email) {
+  const db = getDB();
+  if (!db) throw new Error("Supabase non initialisé.");
+  const { error } = await db.auth.resetPasswordForEmail(email);
+  if (error) throw error;
+  return true;
+}
+
+async function cloudSignOut() {
+  const db = getDB();
+  if (!db) return;
+  await db.auth.signOut();
+}
+
+async function getCloudUser() {
+  const db = getDB();
+  if (!db) return null;
+  const { data: { user } } = await db.auth.getUser();
+  return user;
+}
+
 // --- LEADERBOARD ---
 
 async function pushPlayerToCloud(playerCard) {
@@ -10376,63 +10424,102 @@ class StorageManager {
     return btoa(passcode);
   }
 
-  static async loginCloudAccount(username, passcode) {
-    const cleanUser = username.trim().toLowerCase();
-    const hashedKey = await hashPasscode(passcode);
-
-    // Try Supabase Cloud first
-    const cloudData = await fetchProfileFromCloud(cleanUser, hashedKey);
-    if (cloudData) {
-      const profile = cloudData.profile_data;
-      this.saveProfile(profile);
-      if (cloudData.srs_data) {
-        if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
-        else localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
-
-        if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+  static async registerCloudAccount(email, passcode, username) {
+    const cleanUser = username.trim();
+    try {
+      const authData = await cloudSignUp(email, passcode, cleanUser);
+      if (!authData.user) {
+        return { success: false, message: 'Erreur lors de la création du compte.' };
       }
-      if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
-      if (cloudData.paused_session) {
-        localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
-      } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
-        localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+
+      // Check if we need to wait for email confirmation (depends on Supabase settings)
+      if (authData.user.identities && authData.user.identities.length === 0) {
+        return { success: false, message: 'Cet email est déjà utilisé ou invalide.' };
       }
-      // Ensure friendId is set and saved to Supabase column
+
+      // New account local profile setup
+      const profile = this.getProfile();
+      profile.name = cleanUser;
+      profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
       if (!profile.friendId) {
         profile.friendId = generateFriendId();
-        this.saveProfile(profile);
-        saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
-      } else {
-        // Ensure the Supabase column is updated (in case migrated from old account)
-        saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
       }
+      this.saveProfile(profile);
+      
+      // Wait a moment for Supabase triggers to finish if any, then push profile
+      await pushProfileToCloud(cleanUser, 'supabase_auth_v2', profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems());
+      
+      return { success: true, isNew: true, profile };
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
+  }
+
+  static async loginCloudAccount(email, passcode) {
+    try {
+      const authData = await cloudSignIn(email, passcode);
+      if (!authData.user) {
+        return { success: false, message: 'Identifiants incorrects.' };
+      }
+
+      const username = authData.user.user_metadata?.username || 'Joueur';
+      const cleanUser = username;
+
+      // Try Supabase Cloud first
+      const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
+      if (cloudData) {
+        const profile = cloudData.profile_data || {};
+        profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
+        this.saveProfile(profile);
+        if (cloudData.srs_data) {
+          if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
+          else localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
+
+          if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+        }
+        if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
+        if (cloudData.paused_session) {
+          localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+        } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
+          localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+        }
+        // Ensure friendId is set and saved to Supabase column
+        if (!profile.friendId) {
+          profile.friendId = generateFriendId();
+          this.saveProfile(profile);
+          saveFriendId(cleanUser, 'supabase_auth_v2', profile.friendId).catch(() => {});
+        }
+        return { success: true, isNew: false, profile };
+      }
+
+      // If no cloud data yet, they probably just registered but didn't save yet.
+      const profile = this.getProfile();
+      profile.name = cleanUser;
+      profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
+      if (!profile.friendId) profile.friendId = generateFriendId();
+      this.saveProfile(profile);
+      pushProfileToCloud(cleanUser, 'supabase_auth_v2', profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems()).catch(() => {});
+
       return { success: true, isNew: false, profile };
+    } catch (e) {
+      return { success: false, message: e.message };
     }
+  }
 
-    // Fallback: check localStorage
-    const localKey = `remix_cloud_db_${cleanUser}_${hashedKey}`;
-    const existingData = localStorage.getItem(localKey);
-    if (existingData) {
-      const parsed = JSON.parse(existingData);
-      this.saveProfile(parsed.profile);
-      if (parsed.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(parsed.srs));
-      if (parsed.subjects) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(parsed.subjects));
-      if (parsed.pausedSession) localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(parsed.pausedSession));
-      if (parsed.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(parsed.revisionItems));
-      return { success: true, isNew: false, profile: parsed.profile };
+  static async resetCloudPassword(email) {
+    try {
+      await cloudResetPassword(email);
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: e.message };
     }
+  }
 
-    // New account
+  static async logoutCloudAccount() {
+    await cloudSignOut();
     const profile = this.getProfile();
-    profile.name = username.trim();
-    profile.cloudAccount = { username: cleanUser, hashedKey };
-    if (!profile.friendId) {
-      profile.friendId = generateFriendId();
-    }
+    profile.cloudAccount = null;
     this.saveProfile(profile);
-    pushProfileToCloud(cleanUser, hashedKey, profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems()).catch(() => {});
-    saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
-    return { success: true, isNew: true, profile };
   }
 
   static getRevisionItems() {
@@ -14352,15 +14439,80 @@ function startApp() {
     }, 300);
   }
 
+  // Cloud login modal tabs
+  let cloudLoginMode = 'login';
+  safeOn('tab-cloud-login', 'click', () => {
+    cloudLoginMode = 'login';
+    document.getElementById('tab-cloud-login').style.borderBottom = '2px solid var(--accent-cyan)';
+    document.getElementById('tab-cloud-login').style.color = 'var(--accent-cyan)';
+    document.getElementById('tab-cloud-login').style.fontWeight = '700';
+    document.getElementById('tab-cloud-signup').style.borderBottom = '2px solid transparent';
+    document.getElementById('tab-cloud-signup').style.color = 'var(--text-secondary)';
+    document.getElementById('tab-cloud-signup').style.fontWeight = 'normal';
+    document.getElementById('modal-cloud-user').style.display = 'none';
+    document.getElementById('btn-modal-cloud-login-submit').innerHTML = '🚀 Se connecter';
+  });
+
+  safeOn('tab-cloud-signup', 'click', () => {
+    cloudLoginMode = 'signup';
+    document.getElementById('tab-cloud-signup').style.borderBottom = '2px solid var(--accent-cyan)';
+    document.getElementById('tab-cloud-signup').style.color = 'var(--accent-cyan)';
+    document.getElementById('tab-cloud-signup').style.fontWeight = '700';
+    document.getElementById('tab-cloud-login').style.borderBottom = '2px solid transparent';
+    document.getElementById('tab-cloud-login').style.color = 'var(--text-secondary)';
+    document.getElementById('tab-cloud-login').style.fontWeight = 'normal';
+    document.getElementById('modal-cloud-user').style.display = 'block';
+    document.getElementById('btn-modal-cloud-login-submit').innerHTML = '🚀 Créer un compte';
+  });
+
+  safeOn('btn-modal-cloud-forgot', 'click', async () => {
+    const emailInput = document.getElementById('modal-cloud-email');
+    if (!emailInput || !emailInput.value.trim()) {
+      alert('Veuillez saisir votre adresse email pour réinitialiser le mot de passe.');
+      return;
+    }
+    const res = await StorageManager.resetCloudPassword(emailInput.value.trim());
+    if (res.success) {
+      alert('Un email de réinitialisation a été envoyé (vérifiez vos spams).');
+    } else {
+      alert('Erreur: ' + (res.message || 'Impossible d\'envoyer l\'email.'));
+    }
+  });
+
   // Cloud login modal events
   safeOn('btn-modal-cloud-login-submit', 'click', async () => {
+    const emailInput = document.getElementById('modal-cloud-email');
     const userInput = document.getElementById('modal-cloud-user');
     const passInput = document.getElementById('modal-cloud-pass');
-    if (!userInput || !passInput) return;
-    const username = userInput.value.trim();
+    
+    if (!emailInput || !passInput) return;
+    
+    const email = emailInput.value.trim();
     const passcode = passInput.value.trim();
-    if (!username || !passcode) { alert('Veuillez saisir un pseudo et un mot de passe !'); return; }
-    const res = await StorageManager.loginCloudAccount(username, passcode);
+    const username = userInput ? userInput.value.trim() : '';
+    
+    if (!email || !passcode) { alert('Veuillez saisir un email et un mot de passe !'); return; }
+    if (cloudLoginMode === 'signup' && !username) { alert('Veuillez saisir un pseudo pour votre compte !'); return; }
+    
+    let res;
+    const btn = document.getElementById('btn-modal-cloud-login-submit');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Chargement...';
+    btn.disabled = true;
+
+    try {
+      if (cloudLoginMode === 'signup') {
+        res = await StorageManager.registerCloudAccount(email, passcode, username);
+      } else {
+        res = await StorageManager.loginCloudAccount(email, passcode);
+      }
+    } catch (e) {
+      res = { success: false, message: e.message };
+    }
+
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+
     if (res.success) {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.remove('active');
@@ -14374,6 +14526,8 @@ function startApp() {
       app.updatePausedBanner();
       app.pollFriendNotifications();
       app.renderFriends();
+    } else {
+      alert('Erreur : ' + (res.message || 'Identifiants incorrects.'));
     }
   });
 

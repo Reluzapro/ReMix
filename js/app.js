@@ -2473,15 +2473,80 @@ function startApp() {
     }, 300);
   }
 
+  // Cloud login modal tabs
+  let cloudLoginMode = 'login';
+  safeOn('tab-cloud-login', 'click', () => {
+    cloudLoginMode = 'login';
+    document.getElementById('tab-cloud-login').style.borderBottom = '2px solid var(--accent-cyan)';
+    document.getElementById('tab-cloud-login').style.color = 'var(--accent-cyan)';
+    document.getElementById('tab-cloud-login').style.fontWeight = '700';
+    document.getElementById('tab-cloud-signup').style.borderBottom = '2px solid transparent';
+    document.getElementById('tab-cloud-signup').style.color = 'var(--text-secondary)';
+    document.getElementById('tab-cloud-signup').style.fontWeight = 'normal';
+    document.getElementById('modal-cloud-user').style.display = 'none';
+    document.getElementById('btn-modal-cloud-login-submit').innerHTML = '🚀 Se connecter';
+  });
+
+  safeOn('tab-cloud-signup', 'click', () => {
+    cloudLoginMode = 'signup';
+    document.getElementById('tab-cloud-signup').style.borderBottom = '2px solid var(--accent-cyan)';
+    document.getElementById('tab-cloud-signup').style.color = 'var(--accent-cyan)';
+    document.getElementById('tab-cloud-signup').style.fontWeight = '700';
+    document.getElementById('tab-cloud-login').style.borderBottom = '2px solid transparent';
+    document.getElementById('tab-cloud-login').style.color = 'var(--text-secondary)';
+    document.getElementById('tab-cloud-login').style.fontWeight = 'normal';
+    document.getElementById('modal-cloud-user').style.display = 'block';
+    document.getElementById('btn-modal-cloud-login-submit').innerHTML = '🚀 Créer un compte';
+  });
+
+  safeOn('btn-modal-cloud-forgot', 'click', async () => {
+    const emailInput = document.getElementById('modal-cloud-email');
+    if (!emailInput || !emailInput.value.trim()) {
+      alert('Veuillez saisir votre adresse email pour réinitialiser le mot de passe.');
+      return;
+    }
+    const res = await StorageManager.resetCloudPassword(emailInput.value.trim());
+    if (res.success) {
+      alert('Un email de réinitialisation a été envoyé (vérifiez vos spams).');
+    } else {
+      alert('Erreur: ' + (res.message || 'Impossible d\'envoyer l\'email.'));
+    }
+  });
+
   // Cloud login modal events
   safeOn('btn-modal-cloud-login-submit', 'click', async () => {
+    const emailInput = document.getElementById('modal-cloud-email');
     const userInput = document.getElementById('modal-cloud-user');
     const passInput = document.getElementById('modal-cloud-pass');
-    if (!userInput || !passInput) return;
-    const username = userInput.value.trim();
+    
+    if (!emailInput || !passInput) return;
+    
+    const email = emailInput.value.trim();
     const passcode = passInput.value.trim();
-    if (!username || !passcode) { alert('Veuillez saisir un pseudo et un mot de passe !'); return; }
-    const res = await StorageManager.loginCloudAccount(username, passcode);
+    const username = userInput ? userInput.value.trim() : '';
+    
+    if (!email || !passcode) { alert('Veuillez saisir un email et un mot de passe !'); return; }
+    if (cloudLoginMode === 'signup' && !username) { alert('Veuillez saisir un pseudo pour votre compte !'); return; }
+    
+    let res;
+    const btn = document.getElementById('btn-modal-cloud-login-submit');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Chargement...';
+    btn.disabled = true;
+
+    try {
+      if (cloudLoginMode === 'signup') {
+        res = await StorageManager.registerCloudAccount(email, passcode, username);
+      } else {
+        res = await StorageManager.loginCloudAccount(email, passcode);
+      }
+    } catch (e) {
+      res = { success: false, message: e.message };
+    }
+
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+
     if (res.success) {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.remove('active');
@@ -2495,6 +2560,8 @@ function startApp() {
       app.updatePausedBanner();
       app.pollFriendNotifications();
       app.renderFriends();
+    } else {
+      alert('Erreur : ' + (res.message || 'Identifiants incorrects.'));
     }
   });
 

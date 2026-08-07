@@ -1,6 +1,6 @@
 // Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Supabase Cloud Database sync, and Anti-Cheat Checksum auto-purge
 import { DEFAULT_SUBJECTS } from './questionsData.js';
-import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData, saveFriendId } from './cloudDB.js';
+import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData, saveFriendId, cloudSignUp, cloudSignIn, cloudResetPassword, cloudSignOut } from './cloudDB.js';
 
 const STORAGE_KEYS = {
   SUBJECTS: 'rev_game_subjects_v6',
@@ -342,63 +342,102 @@ export class StorageManager {
     return btoa(passcode);
   }
 
-  static async loginCloudAccount(username, passcode) {
-    const cleanUser = username.trim().toLowerCase();
-    const hashedKey = await hashPasscode(passcode);
-
-    // Try Supabase Cloud first
-    const cloudData = await fetchProfileFromCloud(cleanUser, hashedKey);
-    if (cloudData) {
-      const profile = cloudData.profile_data;
-      this.saveProfile(profile);
-      if (cloudData.srs_data) {
-        if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
-        else localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
-
-        if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+  static async registerCloudAccount(email, passcode, username) {
+    const cleanUser = username.trim();
+    try {
+      const authData = await cloudSignUp(email, passcode, cleanUser);
+      if (!authData.user) {
+        return { success: false, message: 'Erreur lors de la création du compte.' };
       }
-      if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
-      if (cloudData.paused_session) {
-        localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
-      } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
-        localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+
+      // Check if we need to wait for email confirmation (depends on Supabase settings)
+      if (authData.user.identities && authData.user.identities.length === 0) {
+        return { success: false, message: 'Cet email est déjà utilisé ou invalide.' };
       }
-      // Ensure friendId is set and saved to Supabase column
+
+      // New account local profile setup
+      const profile = this.getProfile();
+      profile.name = cleanUser;
+      profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
       if (!profile.friendId) {
         profile.friendId = generateFriendId();
-        this.saveProfile(profile);
-        saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
-      } else {
-        // Ensure the Supabase column is updated (in case migrated from old account)
-        saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
       }
+      this.saveProfile(profile);
+      
+      // Wait a moment for Supabase triggers to finish if any, then push profile
+      await pushProfileToCloud(cleanUser, 'supabase_auth_v2', profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems());
+      
+      return { success: true, isNew: true, profile };
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
+  }
+
+  static async loginCloudAccount(email, passcode) {
+    try {
+      const authData = await cloudSignIn(email, passcode);
+      if (!authData.user) {
+        return { success: false, message: 'Identifiants incorrects.' };
+      }
+
+      const username = authData.user.user_metadata?.username || 'Joueur';
+      const cleanUser = username;
+
+      // Try Supabase Cloud first
+      const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
+      if (cloudData) {
+        const profile = cloudData.profile_data || {};
+        profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
+        this.saveProfile(profile);
+        if (cloudData.srs_data) {
+          if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
+          else localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data));
+
+          if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
+        }
+        if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
+        if (cloudData.paused_session) {
+          localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
+        } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
+          localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+        }
+        // Ensure friendId is set and saved to Supabase column
+        if (!profile.friendId) {
+          profile.friendId = generateFriendId();
+          this.saveProfile(profile);
+          saveFriendId(cleanUser, 'supabase_auth_v2', profile.friendId).catch(() => {});
+        }
+        return { success: true, isNew: false, profile };
+      }
+
+      // If no cloud data yet, they probably just registered but didn't save yet.
+      const profile = this.getProfile();
+      profile.name = cleanUser;
+      profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
+      if (!profile.friendId) profile.friendId = generateFriendId();
+      this.saveProfile(profile);
+      pushProfileToCloud(cleanUser, 'supabase_auth_v2', profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems()).catch(() => {});
+
       return { success: true, isNew: false, profile };
+    } catch (e) {
+      return { success: false, message: e.message };
     }
+  }
 
-    // Fallback: check localStorage
-    const localKey = `remix_cloud_db_${cleanUser}_${hashedKey}`;
-    const existingData = localStorage.getItem(localKey);
-    if (existingData) {
-      const parsed = JSON.parse(existingData);
-      this.saveProfile(parsed.profile);
-      if (parsed.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(parsed.srs));
-      if (parsed.subjects) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(parsed.subjects));
-      if (parsed.pausedSession) localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(parsed.pausedSession));
-      if (parsed.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(parsed.revisionItems));
-      return { success: true, isNew: false, profile: parsed.profile };
+  static async resetCloudPassword(email) {
+    try {
+      await cloudResetPassword(email);
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: e.message };
     }
+  }
 
-    // New account
+  static async logoutCloudAccount() {
+    await cloudSignOut();
     const profile = this.getProfile();
-    profile.name = username.trim();
-    profile.cloudAccount = { username: cleanUser, hashedKey };
-    if (!profile.friendId) {
-      profile.friendId = generateFriendId();
-    }
+    profile.cloudAccount = null;
     this.saveProfile(profile);
-    pushProfileToCloud(cleanUser, hashedKey, profile, this.getSRSData(), this.getSubjects(), this.getPausedSession(), this.getRevisionItems()).catch(() => {});
-    saveFriendId(cleanUser, hashedKey, profile.friendId).catch(() => {});
-    return { success: true, isNew: true, profile };
   }
 
   static getRevisionItems() {
