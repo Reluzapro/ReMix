@@ -185,7 +185,8 @@ export class StorageManager {
         badges: profile.unlockedAchievements || [],
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
-        lastActive: Date.now()
+        lastActive: Date.now(),
+        cloudAccount: profile.cloudAccount
       };
       const idx = registry.findIndex(p => p.name.toLowerCase() === profile.name.toLowerCase());
       if (idx >= 0) registry[idx] = playerCard;

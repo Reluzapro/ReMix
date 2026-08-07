@@ -93,7 +93,7 @@ export async function pushPlayerToCloud(playerCard) {
     if (!session) return;
 
     await db.from('leaderboard').upsert({
-      name: (playerCard.cloudAccount?.username || playerCard.name).toLowerCase(),
+      name: (playerCard.cloudAccount?.username || playerCard.name),
       level: playerCard.level || 1,
       xp: playerCard.xp || 0,
       coins: playerCard.coins || 0,

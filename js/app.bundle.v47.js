@@ -9768,7 +9768,7 @@ async function pushPlayerToCloud(playerCard) {
     if (!session) return;
 
     await db.from('leaderboard').upsert({
-      name: (playerCard.cloudAccount?.username || playerCard.name).toLowerCase(),
+      name: (playerCard.cloudAccount?.username || playerCard.name),
       level: playerCard.level || 1,
       xp: playerCard.xp || 0,
       coins: playerCard.coins || 0,
@@ -10305,7 +10305,8 @@ class StorageManager {
         badges: profile.unlockedAchievements || [],
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
-        lastActive: Date.now()
+        lastActive: Date.now(),
+        cloudAccount: profile.cloudAccount
       };
       const idx = registry.findIndex(p => p.name.toLowerCase() === profile.name.toLowerCase());
       if (idx >= 0) registry[idx] = playerCard;
