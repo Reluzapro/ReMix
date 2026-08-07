@@ -23,6 +23,10 @@ export const EXCLUSIVE_EMOJIS = [
 ];
 
 export const SHOP_ITEMS = [
+  // Power-ups
+  { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
+  { id: 'powerup_skip', type: 'powerup', title: 'Joker (Passer)', desc: 'Passe la question sans perdre de streak', cost: 60, icon: '⏭️' },
+
   // Themes
   { id: 'theme-cyberpunk', type: 'theme', title: 'Cyberpunk Neon', desc: 'Style sombre néon violet et cyan', cost: 0, icon: '🌆' },
   { id: 'theme-midnight', type: 'theme', title: 'Midnight Synthwave', desc: 'Ambiance rétro-futuriste bleu profond', cost: 500, icon: '🌃' },
@@ -82,11 +86,7 @@ export const SHOP_ITEMS = [
   { id: 'emoji-heart', type: 'emoji', title: 'Coeur', desc: 'Emoji de duel', cost: 2500, icon: '❤️' },
   { id: 'emoji-crown', type: 'emoji', title: 'Couronne', desc: 'Emoji de duel', cost: 3000, icon: '👑' },
   { id: 'emoji-100', type: 'emoji', title: '100%', desc: 'Emoji de duel', cost: 4000, icon: '💯' },
-  { id: 'emoji-bomb', type: 'emoji', title: 'Bombe', desc: 'Emoji de duel', cost: 5000, icon: '💣' },
-
-  // Power-ups
-  { id: 'powerup_fifty', type: 'powerup', title: '50 / 50', desc: 'Élimine 2 mauvaises réponses', cost: 40, icon: '✂️' },
-  { id: 'powerup_skip', type: 'powerup', title: 'Joker (Passer)', desc: 'Passe la question sans perdre de streak', cost: 60, icon: '⏭️' }
+  { id: 'emoji-bomb', type: 'emoji', title: 'Bombe', desc: 'Emoji de duel', cost: 5000, icon: '💣' }
 ];
 
 export class GamificationEngine {
