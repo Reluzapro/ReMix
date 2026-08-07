@@ -11328,6 +11328,8 @@ class GamificationEngine {
   }
 
   static async checkDailyLogin(profile) {
+    if (!profile.cloudAccount) return null; // Require cloud account
+    
     let today = null;
     
     // Attempt to get server date
