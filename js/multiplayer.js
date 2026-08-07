@@ -221,7 +221,7 @@ export class MultiplayerEngine {
       subjectName: subjectData.name,
       wager,
       isPublic: false,
-      player1Id: profile.cloudAccount?.username || profile.name,
+      player1Id: (profile.cloudAccount?.username || profile.name).toLowerCase(),
       player1Name: profile.name,
       player1Avatar: profile.avatar || '🎓',
       questionsData: questionsClean
@@ -233,7 +233,7 @@ export class MultiplayerEngine {
 
   static async joinPrivateRoom(code) {
     const profile = StorageManager.getProfile();
-    const myUsername = profile.cloudAccount?.username || profile.name;
+    const myUsername = (profile.cloudAccount?.username || profile.name).toLowerCase();
 
     const battle = await this.getBattleByCode(code.toUpperCase());
     if (!battle) return { success: false, message: 'Salon introuvable ou déjà commencé.' };
@@ -255,7 +255,7 @@ export class MultiplayerEngine {
 
   static async startMatchmaking(subjectData, wager = 0) {
     const profile = StorageManager.getProfile();
-    const myUsername = profile.cloudAccount?.username || profile.name;
+    const myUsername = (profile.cloudAccount?.username || profile.name).toLowerCase();
 
     // Search for an existing public room
     const existing = await this.findMatchmakingBattle(subjectData.id, wager, myUsername);

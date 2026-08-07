@@ -380,12 +380,14 @@ export class StorageManager {
         return { success: false, message: 'Identifiants incorrects.' };
       }
 
-      const username = authData.user.user_metadata?.username || 'Joueur';
-      const cleanUser = username;
+      let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_]/g, '');
 
       // Try Supabase Cloud first
       const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
       if (cloudData) {
+        if (cloudData.username) {
+          cleanUser = cloudData.username;
+        }
         const profile = cloudData.profile_data || {};
         profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
         this.saveProfile(profile);

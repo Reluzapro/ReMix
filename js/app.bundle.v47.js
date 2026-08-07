@@ -10475,12 +10475,14 @@ class StorageManager {
         return { success: false, message: 'Identifiants incorrects.' };
       }
 
-      const username = authData.user.user_metadata?.username || 'Joueur';
-      const cleanUser = username;
+      let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_]/g, '');
 
       // Try Supabase Cloud first
       const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
       if (cloudData) {
+        if (cloudData.username) {
+          cleanUser = cloudData.username;
+        }
         const profile = cloudData.profile_data || {};
         profile.cloudAccount = { username: cleanUser, hashedKey: 'supabase_auth_v2' };
         this.saveProfile(profile);
@@ -11798,7 +11800,7 @@ class MultiplayerEngine {
       subjectName: subjectData.name,
       wager,
       isPublic: false,
-      player1Id: profile.cloudAccount?.username || profile.name,
+      player1Id: (profile.cloudAccount?.username || profile.name).toLowerCase(),
       player1Name: profile.name,
       player1Avatar: profile.avatar || '🎓',
       questionsData: questionsClean
@@ -11810,7 +11812,7 @@ class MultiplayerEngine {
 
   static async joinPrivateRoom(code) {
     const profile = StorageManager.getProfile();
-    const myUsername = profile.cloudAccount?.username || profile.name;
+    const myUsername = (profile.cloudAccount?.username || profile.name).toLowerCase();
 
     const battle = await this.getBattleByCode(code.toUpperCase());
     if (!battle) return { success: false, message: 'Salon introuvable ou déjà commencé.' };
@@ -11832,7 +11834,7 @@ class MultiplayerEngine {
 
   static async startMatchmaking(subjectData, wager = 0) {
     const profile = StorageManager.getProfile();
-    const myUsername = profile.cloudAccount?.username || profile.name;
+    const myUsername = (profile.cloudAccount?.username || profile.name).toLowerCase();
 
     // Search for an existing public room
     const existing = await this.findMatchmakingBattle(subjectData.id, wager, myUsername);
