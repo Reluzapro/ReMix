@@ -291,6 +291,18 @@ class AppController {
             <button class="btn-secondary btn-notif-dismiss" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">Refuser</button>
           </div>
         `;
+      } else if (n.type === 'friend_request') {
+        card.innerHTML = `
+          <span style="font-size: 2rem;">${n.from_avatar || '🎓'}</span>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; font-size: 0.95rem;">👋 Demande d'ami</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">${n.from_username} veut devenir ton ami !</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+            <button class="btn-primary btn-notif-accept-friend" data-user="${n.from_username}" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">Accepter</button>
+            <button class="btn-secondary btn-notif-dismiss" data-id="${n.id}" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">Ignorer</button>
+          </div>
+        `;
       }
       list.appendChild(card);
 
@@ -343,6 +355,24 @@ class AppController {
           card.remove();
           await this.pollFriendNotifications();
           alert(`🎁 Récompense "${rew?.title}" ajoutée à ta liste !`);
+        });
+      });
+
+      card.querySelectorAll('.btn-notif-accept-friend').forEach(b => {
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          b.textContent = '...';
+          const friendName = b.dataset.user;
+          const myProfile = StorageManager.getProfile();
+          const myUsername = myProfile.cloudAccount?.username;
+          if (myUsername) {
+            await addFriend(myUsername, friendName);
+            await markNotificationRead(b.dataset.id);
+            this._pendingNotifs = (this._pendingNotifs || []).filter(x => x.id !== b.dataset.id);
+            card.remove();
+            await this.pollFriendNotifications();
+            await this.renderFriends();
+          }
         });
       });
     });
@@ -771,6 +801,14 @@ class AppController {
     // Only show add friend if not viewing ourselves and we are logged in
     if (!player.isUser && myUsername) {
       addFriendBtn.style.display = 'block';
+      
+      // Hide button if already friends
+      getFriends(myUsername).then(friends => {
+        if (friends.some(f => f.username === player.name.toLowerCase())) {
+          addFriendBtn.style.display = 'none';
+        }
+      });
+      
       addFriendBtn.onclick = async () => {
         const friendUsername = player.name.toLowerCase();
         // Since leaderboard name might be display name, we rely on the fact that name in leaderboard currently IS the username.
