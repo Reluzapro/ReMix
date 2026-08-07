@@ -185,14 +185,12 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
   try {
     const db = getDB();
     if (!db) return;
+    
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return;
 
-    // Fetch cloud state first to safely merge before overwriting
-    const { data: cloudRecord } = await db
-      .from('profiles')
-      .select('*')
-      .eq('username', username.toLowerCase())
-      .eq('hashed_key', hashedKey)
-      .maybeSingle();
+    // First, fetch the current cloud record to properly merge it
+    const cloudRecord = await fetchProfileFromCloud(username, hashedKey);
 
     let finalProfile = profile;
     let finalSubjects = subjectsData;
@@ -216,10 +214,11 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
       }
     }
 
-    // Embed pausedSession inside srs_data JSONB so it works 100% with standard Supabase profiles table without needing DDL migrations
+    // Upsert using the authenticated user's ID as the primary key
     await db.from('profiles').upsert({
+      id: session.user.id,
       username: username.toLowerCase(),
-      hashed_key: hashedKey,
+      hashed_key: 'supabase_auth_v2',
       profile_data: finalProfile,
       srs_data: {
         srs: srsData,
@@ -228,7 +227,7 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
       },
       subjects_data: finalSubjects,
       updated_at: Date.now()
-    }, { onConflict: 'username,hashed_key' });
+    }, { onConflict: 'id' });
   } catch (e) {
     console.log('Profile cloud push failed:', e.message);
   }
@@ -238,12 +237,16 @@ export async function fetchProfileFromCloud(username, hashedKey) {
   try {
     const db = getDB();
     if (!db) return null;
+
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return null;
+
     const { data, error } = await db
       .from('profiles')
       .select('*')
-      .eq('username', username.toLowerCase())
-      .eq('hashed_key', hashedKey)
+      .eq('id', session.user.id)
       .maybeSingle();
+      
     if (error) throw error;
     if (data) {
       if (!data.paused_session && data.srs_data?.pausedSession) {
