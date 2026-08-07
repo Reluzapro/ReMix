@@ -14889,9 +14889,17 @@ function startApp() {
       const modal = document.getElementById('modal-cloud-login');
       if (modal) modal.classList.remove('active');
       SoundFX.playLevelUp();
+      
+      // Check daily login for the newly loaded cloud profile
+      GamificationEngine.checkDailyLogin(StorageManager.getProfile()).then((loginReward) => {
+        app.updateHeaderStats();
+        if (loginReward) {
+          app.showDailyRewardPopup(loginReward);
+        }
+      });
+
       // Refresh views without re-running init (avoids duplicate listeners)
       app.applyUserTheme();
-      app.updateHeaderStats();
       app.renderSubjects();
       app.renderShop();
       app.renderProfile();
