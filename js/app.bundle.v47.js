@@ -14367,8 +14367,9 @@ function startApp() {
     }
   });
 
-  if (window.supabase) {
-    window.supabase.auth.onAuthStateChange(async (event, session) => {
+  const dbClient = getDB();
+  if (dbClient) {
+    dbClient.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         const modal = document.getElementById('modal-cloud-reset-password');
         if (modal) modal.classList.add('active');
@@ -14383,7 +14384,9 @@ function startApp() {
       alert('Le mot de passe doit faire au moins 6 caractères.');
       return;
     }
-    const { error } = await window.supabase.auth.updateUser({ password: newPass });
+    const db = getDB();
+    if (!db) return;
+    const { error } = await db.auth.updateUser({ password: newPass });
     if (error) {
       alert('Erreur lors de la réinitialisation : ' + error.message);
     } else {
