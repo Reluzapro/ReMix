@@ -123,6 +123,10 @@ CREATE POLICY "Creator can delete battle" ON battles
 -- Anyone can read the leaderboard
 DROP POLICY IF EXISTS "Insertion publique" ON leaderboard;
 DROP POLICY IF EXISTS "Mise a jour publique" ON leaderboard;
+DROP POLICY IF EXISTS "Anyone can read the leaderboard" ON leaderboard;
+
+CREATE POLICY "Anyone can read the leaderboard" ON leaderboard
+  FOR SELECT USING (true);
 
 -- To allow users to insert/update their own score on the leaderboard, they must be the owner.
 -- We can match by name = profile.username

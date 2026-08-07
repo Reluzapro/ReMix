@@ -41,7 +41,7 @@ class AppController {
     this.renderProfile();
     this.setupCSVImporter();
     this.setupEventListeners();
-    this.setupProfileAdminTrigger();
+
     this.setupFriendSystem();
 
     // Periodic 30-second silent background cloud sync heartbeat
@@ -1857,7 +1857,7 @@ class AppController {
       achContainer.appendChild(card);
     });
 
-    this.setupProfileAdminTrigger();
+
   }
 
   setupCSVImporter() {
