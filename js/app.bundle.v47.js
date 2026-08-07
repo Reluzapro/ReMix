@@ -12027,7 +12027,34 @@ class AppController {
     );
 
     if (sent) {
-      alert(`✅ Invitation envoyée à ${friendName} ! Code de salon : ${result.code}`);
+      alert(`✅ Invitation envoyée à ${friendName} !\nRejoignez le salon, vous allez y être redirigé.`);
+      
+      // Navigate to duels tab
+      const duelsTab = document.querySelector('[data-target="duels-view"]');
+      if (duelsTab) duelsTab.click();
+
+      // Show matchmaking screen waiting for the friend
+      this.showDuelScreen('matchmaking');
+      const statusText = document.getElementById('matchmaking-status-text');
+      if (statusText) statusText.textContent = `En attente de ${friendName}... Code : ${result.code}`;
+
+      const channel = MultiplayerEngine.subscribeToBattle(result.battle.id, {
+        onPlayerJoined: (data) => {
+          this.enterDuelLobby({ ...result.battle, ...data });
+        }
+      });
+
+      this.duelState = { battleId: result.battle.id, channel, battle: result.battle };
+
+      // Poll to make sure we don't miss the join event
+      this.matchmakingPollInterval = setInterval(async () => {
+        const battle = await MultiplayerEngine.getBattle(result.battle.id);
+        if (battle && battle.player2_id) {
+          clearInterval(this.matchmakingPollInterval);
+          this.matchmakingPollInterval = null;
+          this.enterDuelLobby(battle);
+        }
+      }, 2000);
     } else {
       alert('❌ Erreur lors de l\'envoi de l\'invitation.');
     }
