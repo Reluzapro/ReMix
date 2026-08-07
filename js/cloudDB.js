@@ -220,6 +220,7 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
       username: username.toLowerCase(),
       hashed_key: 'supabase_auth_v2',
       profile_data: finalProfile,
+      friend_id: finalProfile.friendId,
       srs_data: {
         srs: srsData,
         revisionItems: revisionItems,

@@ -9895,6 +9895,7 @@ async function pushProfileToCloud(username, hashedKey, profile, srsData, subject
       username: username.toLowerCase(),
       hashed_key: 'supabase_auth_v2',
       profile_data: finalProfile,
+      friend_id: finalProfile.friendId,
       srs_data: {
         srs: srsData,
         revisionItems: revisionItems,
@@ -9958,10 +9959,13 @@ async function saveFriendId(username, hashedKey, friendId) {
   try {
     const db = getDB();
     if (!db) return;
+
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return;
+
     await db.from('profiles')
       .update({ friend_id: friendId })
-      .eq('username', username.toLowerCase())
-      .eq('hashed_key', hashedKey);
+      .eq('id', session.user.id);
   } catch (e) {
     console.log('saveFriendId failed:', e.message);
   }
