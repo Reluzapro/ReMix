@@ -347,8 +347,11 @@ export class MultiplayerEngine {
     const profile = StorageManager.getProfile();
     const isVerified = StorageManager.verifyAntiCheatToken(profile);
 
+    const myId = (profile.cloudAccount?.username || profile.name || 'Réviseur Pro');
+    const myIdLower = myId.toLowerCase();
+
     const userEntry = {
-      name: profile.name || 'Réviseur Pro',
+      name: myId,
       level: profile.level || 1,
       xp: profile.xp || 0,
       coins: profile.coins || 0,
@@ -374,7 +377,7 @@ export class MultiplayerEngine {
       const isValid = StorageManager.verifyAntiCheatToken(profileLike);
       if (!isValid) return;
 
-      const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
+      const isMe = player.name.toLowerCase() === myIdLower;
       mapPlayers.set(player.name.toLowerCase(), {
         name: player.name,
         level: player.level,
@@ -388,7 +391,7 @@ export class MultiplayerEngine {
     });
 
     if (isVerified) {
-      mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
+      mapPlayers.set(myIdLower, userEntry);
     }
 
     return Array.from(mapPlayers.values()).sort((a, b) => {

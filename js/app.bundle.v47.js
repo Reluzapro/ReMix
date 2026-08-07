@@ -9746,7 +9746,7 @@ async function pushPlayerToCloud(playerCard) {
     const db = getDB();
     if (!db) return;
     await db.from('leaderboard').upsert({
-      name: playerCard.name.toLowerCase(),
+      name: (playerCard.cloudAccount?.username || playerCard.name).toLowerCase(),
       level: playerCard.level || 1,
       xp: playerCard.xp || 0,
       coins: playerCard.coins || 0,
@@ -11926,8 +11926,11 @@ class MultiplayerEngine {
     const profile = StorageManager.getProfile();
     const isVerified = StorageManager.verifyAntiCheatToken(profile);
 
+    const myId = (profile.cloudAccount?.username || profile.name || 'Réviseur Pro');
+    const myIdLower = myId.toLowerCase();
+
     const userEntry = {
-      name: profile.name || 'Réviseur Pro',
+      name: myId,
       level: profile.level || 1,
       xp: profile.xp || 0,
       coins: profile.coins || 0,
@@ -11953,7 +11956,7 @@ class MultiplayerEngine {
       const isValid = StorageManager.verifyAntiCheatToken(profileLike);
       if (!isValid) return;
 
-      const isMe = player.name.toLowerCase() === userEntry.name.toLowerCase();
+      const isMe = player.name.toLowerCase() === myIdLower;
       mapPlayers.set(player.name.toLowerCase(), {
         name: player.name,
         level: player.level,
@@ -11967,7 +11970,7 @@ class MultiplayerEngine {
     });
 
     if (isVerified) {
-      mapPlayers.set(userEntry.name.toLowerCase(), userEntry);
+      mapPlayers.set(myIdLower, userEntry);
     }
 
     return Array.from(mapPlayers.values()).sort((a, b) => {
@@ -13966,17 +13969,13 @@ class AppController {
     if (btnChangeUser) {
       btnChangeUser.addEventListener('click', () => {
         const profile = StorageManager.getProfile();
-        if (profile.cloudAccount?.username) {
-          alert('Votre pseudo est lié à votre compte cloud et ne peut pas être modifié localement.');
-          return;
-        }
-        const newName = prompt('Entrez votre nouveau pseudo :', profile.name);
+        const newName = prompt('Entrez votre nouveau nom d\'affichage (Amis & Duels) :', profile.name);
         if (newName && newName.trim()) {
           profile.name = newName.trim();
           StorageManager.saveProfile(profile);
           this.renderProfile();
           this.renderDuelsView();
-          alert('Pseudo mis à jour avec succès !');
+          alert('Nom d\'affichage mis à jour avec succès !');
         }
       });
     }

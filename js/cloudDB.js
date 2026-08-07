@@ -71,7 +71,7 @@ export async function pushPlayerToCloud(playerCard) {
     const db = getDB();
     if (!db) return;
     await db.from('leaderboard').upsert({
-      name: playerCard.name.toLowerCase(),
+      name: (playerCard.cloudAccount?.username || playerCard.name).toLowerCase(),
       level: playerCard.level || 1,
       xp: playerCard.xp || 0,
       coins: playerCard.coins || 0,
