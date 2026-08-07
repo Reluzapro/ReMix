@@ -2020,6 +2020,22 @@ class AppController {
       if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
     });
 
+    const ensureValidSession = async () => {
+      const db = getDB();
+      if (!db) return false;
+      const { data: { session }, error } = await db.auth.getSession();
+      if (error || !session) {
+        const p = StorageManager.getProfile();
+        p.cloudAccount = null;
+        StorageManager.saveProfile(p);
+        alert("Votre session a expiré ou le mot de passe a été modifié. Veuillez vous reconnecter.");
+        const modal = document.getElementById('modal-cloud-login');
+        if (modal) modal.classList.add('active');
+        return false;
+      }
+      return true;
+    };
+
     // Matchmaking Auto
     safeOn('btn-matchmaking', 'click', async () => {
       const profile = StorageManager.getProfile();
@@ -2028,6 +2044,7 @@ class AppController {
         if (warn) warn.style.display = 'block';
         return;
       }
+      if (!(await ensureValidSession())) return;
       const subjectId = document.getElementById('duel-subject-select').value;
       const subjects = StorageManager.getSubjects();
       const sub = subjects[subjectId];
@@ -2152,6 +2169,7 @@ class AppController {
         if (warn) warn.style.display = 'block';
         return;
       }
+      if (!(await ensureValidSession())) return;
       const codeInput = document.getElementById('input-duel-code').value.trim().toUpperCase();
       if (!codeInput) { alert('Veuillez entrer un code de salon !'); return; }
 
