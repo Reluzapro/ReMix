@@ -93,7 +93,17 @@ function computeAntiCheatToken(profile) {
   return `sig_${Math.abs(hash).toString(16)}`;
 }
 
+let subscribers = [];
+
 export class StorageManager {
+  static subscribe(fn) {
+    subscribers.push(fn);
+  }
+
+  static notify() {
+    subscribers.forEach(fn => fn());
+  }
+
   static computeSignature(profile) {
     return computeAntiCheatToken(profile);
   }
@@ -117,6 +127,7 @@ export class StorageManager {
     try {
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
       this.autoSyncCloud();
+      this.notify();
     } catch (e) {}
   }
 
@@ -165,6 +176,7 @@ export class StorageManager {
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
       this.registerGlobalPlayer(profile);
       this.autoSyncCloud();
+      this.notify();
     } catch (e) {}
   }
 
