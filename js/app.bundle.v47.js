@@ -10223,7 +10223,15 @@ async function uploadRewardImage(base64Data, username) {
     if (!db) return null;
     
     const blob = dataURLtoBlob(base64Data);
-    const fileName = `${username}_${Date.now()}.webp`;
+    
+    // Nettoyer le nom d'utilisateur (retirer accents, espaces, etc.) pour Supabase Storage
+    const safeUsername = username
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]/g, "_")
+      .toLowerCase();
+      
+    const fileName = `${safeUsername}_${Date.now()}.webp`;
     
     const { data, error } = await db.storage
       .from('reward_images')
