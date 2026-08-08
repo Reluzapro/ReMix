@@ -206,6 +206,19 @@ export function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}) {
   return { ...cloudSubjects, ...localSubjects };
 }
 
+export async function checkCloudUpdateTimestamp() {
+  try {
+    const db = getDB();
+    if (!db) return 0;
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return 0;
+    const { data } = await db.from('profiles').select('updated_at').eq('id', session.user.id).maybeSingle();
+    return data ? data.updated_at : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 export async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData, pausedSession = null, revisionItems = []) {
   try {
     const db = getDB();
@@ -214,58 +227,42 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
     const { data: { session } } = await db.auth.getSession();
     if (!session) return;
 
-    // First, fetch the current cloud record to properly merge it
-    const cloudRecord = await fetchProfileFromCloud(username, hashedKey);
-
-    let finalProfile = profile;
-    let finalSubjects = subjectsData;
-    let finalPausedSession = pausedSession;
-
-    if (cloudRecord) {
-      finalProfile = mergeProfileData(profile, cloudRecord.profile_data);
-      finalSubjects = mergeSubjectsData(subjectsData, cloudRecord.subjects_data);
-
-      const cloudSession = cloudRecord.srs_data?.pausedSession || cloudRecord.paused_session;
-      const localSavedAt = pausedSession?.savedAt || 0;
-      const cloudSavedAt = cloudSession?.savedAt || 0;
-      const localClearedAt = profile.pausedSessionClearedAt || 0;
-
-      if (pausedSession && localSavedAt >= cloudSavedAt) {
-        finalPausedSession = pausedSession;
-      } else if (cloudSession && cloudSavedAt > localSavedAt && cloudSavedAt > localClearedAt) {
-        finalPausedSession = cloudSession;
-      } else {
-        finalPausedSession = null;
-      }
-    }
-
-    // Upsert using the authenticated user's ID as the primary key
-    const { error } = await db.from('profiles').upsert({
-      id: session.user.id,
+    let payload = {
       username: username.toLowerCase(),
       hashed_key: 'supabase_auth_v2',
-      profile_data: finalProfile,
-      friend_id: finalProfile.friendId,
+      profile_data: profile,
+      friend_id: profile.friendId,
       srs_data: {
         srs: srsData,
         revisionItems: revisionItems,
-        pausedSession: finalPausedSession
+        pausedSession: pausedSession
       },
-      subjects_data: finalSubjects,
       updated_at: Date.now()
-    }, { onConflict: 'id' });
+    };
 
-    if (error) {
-      console.error('Upsert error:', error);
-      alert('Erreur critique de sauvegarde Cloud: ' + error.message);
+    // Update local timestamp to prevent our own push from triggering a pull
+    try { localStorage.setItem('remix_last_cloud_sync', payload.updated_at.toString()); } catch(e){}
+
+    // Use UPDATE by default to avoid overwriting omitted columns (like subjects_data) to NULL
+    const { data, error } = await db.from('profiles').update(payload).eq('id', session.user.id).select('id');
+
+    // If row doesn't exist yet, fallback to INSERT
+    if ((!error && (!data || data.length === 0)) || (error && error.code === 'PGRST116')) {
+      payload.id = session.user.id;
+      try {
+        const subjectsStr = JSON.stringify(subjectsData || {});
+        if (subjectsStr.length < 1024 * 1024 * 2) { 
+          payload.subjects_data = subjectsData;
+        }
+      } catch (e) {}
+      await db.from('profiles').insert(payload);
     }
   } catch (e) {
-    console.error('Profile cloud push failed:', e);
-    alert('Erreur réseau Cloud: ' + e.message);
+    console.error('Profile cloud push failed:', e.message);
   }
 }
 
-export async function fetchProfileFromCloud(username, hashedKey) {
+export async function fetchProfileFromCloud(username, hashedKey, includeSubjects = false) {
   try {
     const db = getDB();
     if (!db) return null;
@@ -273,11 +270,14 @@ export async function fetchProfileFromCloud(username, hashedKey) {
     const { data: { session } } = await db.auth.getSession();
     if (!session) return null;
 
-    const { data, error } = await db
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .maybeSingle();
+    let query = db.from('profiles');
+    if (includeSubjects) {
+      query = query.select('*');
+    } else {
+      query = query.select('id, username, hashed_key, profile_data, friend_id, srs_data, paused_session, updated_at');
+    }
+
+    const { data, error } = await query.eq('id', session.user.id).maybeSingle();
       
     if (error) throw error;
     if (data) {
@@ -372,7 +372,11 @@ export async function getFriends(myUsername) {
         friendId: p.friend_id || '???',
         name: pd.name || p.username,
         avatar: pd.avatar || '🎓',
-        level: pd.level || 1
+        level: pd.level || 1,
+        wins: pd.stats?.duelWins || 0,
+        total_duels: pd.stats?.duelsPlayed || 0,
+        streak: pd.streakDays || 0,
+        badges: pd.unlockedAchievements || []
       };
     });
   } catch (e) {
@@ -434,9 +438,166 @@ export async function markNotificationRead(id) {
   try {
     const db = getDB();
     if (!db) return;
-    await db.from('friend_notifications').update({ is_read: true }).eq('id', id);
+    await db.from('friend_notifications').delete().eq('id', id);
   } catch (e) {
     console.log('markNotificationRead failed:', e.message);
   }
 }
 
+// --- COMMUNITY SUBJECTS ---
+
+export async function submitCommunitySubject(subjectName, author, category, questionsData) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects').insert({
+      subject_name: subjectName,
+      author: author,
+      category: category,
+      questions_data: questionsData,
+      status: 'pending'
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('submitCommunitySubject failed:', e.message);
+    return false;
+  }
+}
+
+export async function fetchPendingCommunitySubjects() {
+  try {
+    const db = getDB();
+    if (!db) return [];
+    const { data, error } = await db.from('community_subjects')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('fetchPendingCommunitySubjects failed:', e.message);
+    return [];
+  }
+}
+
+export async function fetchAcceptedCommunitySubjects() {
+  try {
+    const db = getDB();
+    if (!db) return [];
+    const { data, error } = await db.from('community_subjects')
+      .select('id, subject_name, author, category, created_at, questions_data')
+      .eq('status', 'accepted')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('fetchAcceptedCommunitySubjects failed:', e.message);
+    return [];
+  }
+}
+
+export async function updateCommunitySubjectStatus(subjectId, status) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects')
+      .update({ status: status })
+      .eq('id', subjectId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('updateCommunitySubjectStatus failed:', e.message);
+    return false;
+  }
+}
+
+export async function updateCommunitySubjectCategory(subjectId, category) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects')
+      .update({ category: category })
+      .eq('id', subjectId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('updateCommunitySubjectCategory failed:', e.message);
+    return false;
+  }
+}
+
+// ==========================================
+// SUPABASE STORAGE LOGIC
+// ==========================================
+
+const _signedUrlCache = new Map();
+
+function dataURLtoBlob(dataurl) {
+  let arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+      bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+  while(n--){
+      u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], {type:mime});
+}
+
+export async function uploadRewardImage(base64Data, username) {
+  try {
+    const db = getDB();
+    if (!db) return null;
+    
+    const blob = dataURLtoBlob(base64Data);
+    const fileName = `${username}_${Date.now()}.webp`;
+    
+    const { data, error } = await db.storage
+      .from('reward_images')
+      .upload(fileName, blob, {
+        contentType: 'image/webp',
+        cacheControl: '3600',
+        upsert: false
+      });
+      
+    if (error) throw error;
+    return data.path;
+  } catch (e) {
+    console.error('uploadRewardImage failed:', e.message);
+    return null;
+  }
+}
+
+export async function getRewardImageUrl(path) {
+  if (!path) return null;
+  // Backward compatibility for old base64 images stored in JSON
+  if (path.startsWith('data:image')) return path;
+  
+  if (_signedUrlCache.has(path)) {
+    const cached = _signedUrlCache.get(path);
+    // Refresh 1 hour before expiry (approx 24h validity)
+    if (Date.now() < cached.expiresAt - (60 * 60 * 1000)) {
+      return cached.url;
+    }
+  }
+
+  try {
+    const db = getDB();
+    if (!db) return null;
+    
+    // 24 hours validity
+    const { data, error } = await db.storage
+      .from('reward_images')
+      .createSignedUrl(path, 60 * 60 * 24);
+      
+    if (error) throw error;
+    
+    _signedUrlCache.set(path, {
+      url: data.signedUrl,
+      expiresAt: Date.now() + (60 * 60 * 24 * 1000)
+    });
+    
+    return data.signedUrl;
+  } catch (e) {
+    console.error('getRewardImageUrl failed:', e.message);
+    return null;
+  }
+}

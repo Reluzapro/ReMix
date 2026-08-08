@@ -9881,6 +9881,19 @@ function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}) {
   return { ...cloudSubjects, ...localSubjects };
 }
 
+async function checkCloudUpdateTimestamp() {
+  try {
+    const db = getDB();
+    if (!db) return 0;
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return 0;
+    const { data } = await db.from('profiles').select('updated_at').eq('id', session.user.id).maybeSingle();
+    return data ? data.updated_at : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 async function pushProfileToCloud(username, hashedKey, profile, srsData, subjectsData, pausedSession = null, revisionItems = []) {
   try {
     const db = getDB();
@@ -9889,58 +9902,42 @@ async function pushProfileToCloud(username, hashedKey, profile, srsData, subject
     const { data: { session } } = await db.auth.getSession();
     if (!session) return;
 
-    // First, fetch the current cloud record to properly merge it
-    const cloudRecord = await fetchProfileFromCloud(username, hashedKey);
-
-    let finalProfile = profile;
-    let finalSubjects = subjectsData;
-    let finalPausedSession = pausedSession;
-
-    if (cloudRecord) {
-      finalProfile = mergeProfileData(profile, cloudRecord.profile_data);
-      finalSubjects = mergeSubjectsData(subjectsData, cloudRecord.subjects_data);
-
-      const cloudSession = cloudRecord.srs_data?.pausedSession || cloudRecord.paused_session;
-      const localSavedAt = pausedSession?.savedAt || 0;
-      const cloudSavedAt = cloudSession?.savedAt || 0;
-      const localClearedAt = profile.pausedSessionClearedAt || 0;
-
-      if (pausedSession && localSavedAt >= cloudSavedAt) {
-        finalPausedSession = pausedSession;
-      } else if (cloudSession && cloudSavedAt > localSavedAt && cloudSavedAt > localClearedAt) {
-        finalPausedSession = cloudSession;
-      } else {
-        finalPausedSession = null;
-      }
-    }
-
-    // Upsert using the authenticated user's ID as the primary key
-    const { error } = await db.from('profiles').upsert({
-      id: session.user.id,
+    let payload = {
       username: username.toLowerCase(),
       hashed_key: 'supabase_auth_v2',
-      profile_data: finalProfile,
-      friend_id: finalProfile.friendId,
+      profile_data: profile,
+      friend_id: profile.friendId,
       srs_data: {
         srs: srsData,
         revisionItems: revisionItems,
-        pausedSession: finalPausedSession
+        pausedSession: pausedSession
       },
-      subjects_data: finalSubjects,
       updated_at: Date.now()
-    }, { onConflict: 'id' });
+    };
 
-    if (error) {
-      console.error('Upsert error:', error);
-      alert('Erreur critique de sauvegarde Cloud: ' + error.message);
+    // Update local timestamp to prevent our own push from triggering a pull
+    try { localStorage.setItem('remix_last_cloud_sync', payload.updated_at.toString()); } catch(e){}
+
+    // Use UPDATE by default to avoid overwriting omitted columns (like subjects_data) to NULL
+    const { data, error } = await db.from('profiles').update(payload).eq('id', session.user.id).select('id');
+
+    // If row doesn't exist yet, fallback to INSERT
+    if ((!error && (!data || data.length === 0)) || (error && error.code === 'PGRST116')) {
+      payload.id = session.user.id;
+      try {
+        const subjectsStr = JSON.stringify(subjectsData || {});
+        if (subjectsStr.length < 1024 * 1024 * 2) { 
+          payload.subjects_data = subjectsData;
+        }
+      } catch (e) {}
+      await db.from('profiles').insert(payload);
     }
   } catch (e) {
-    console.error('Profile cloud push failed:', e);
-    alert('Erreur réseau Cloud: ' + e.message);
+    console.error('Profile cloud push failed:', e.message);
   }
 }
 
-async function fetchProfileFromCloud(username, hashedKey) {
+async function fetchProfileFromCloud(username, hashedKey, includeSubjects = false) {
   try {
     const db = getDB();
     if (!db) return null;
@@ -9948,11 +9945,14 @@ async function fetchProfileFromCloud(username, hashedKey) {
     const { data: { session } } = await db.auth.getSession();
     if (!session) return null;
 
-    const { data, error } = await db
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .maybeSingle();
+    let query = db.from('profiles');
+    if (includeSubjects) {
+      query = query.select('*');
+    } else {
+      query = query.select('id, username, hashed_key, profile_data, friend_id, srs_data, paused_session, updated_at');
+    }
+
+    const { data, error } = await query.eq('id', session.user.id).maybeSingle();
       
     if (error) throw error;
     if (data) {
@@ -10047,7 +10047,11 @@ async function getFriends(myUsername) {
         friendId: p.friend_id || '???',
         name: pd.name || p.username,
         avatar: pd.avatar || '🎓',
-        level: pd.level || 1
+        level: pd.level || 1,
+        wins: pd.stats?.duelWins || 0,
+        total_duels: pd.stats?.duelsPlayed || 0,
+        streak: pd.streakDays || 0,
+        badges: pd.unlockedAchievements || []
       };
     });
   } catch (e) {
@@ -10109,12 +10113,169 @@ async function markNotificationRead(id) {
   try {
     const db = getDB();
     if (!db) return;
-    await db.from('friend_notifications').update({ is_read: true }).eq('id', id);
+    await db.from('friend_notifications').delete().eq('id', id);
   } catch (e) {
     console.log('markNotificationRead failed:', e.message);
   }
 }
 
+// --- COMMUNITY SUBJECTS ---
+
+async function submitCommunitySubject(subjectName, author, category, questionsData) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects').insert({
+      subject_name: subjectName,
+      author: author,
+      category: category,
+      questions_data: questionsData,
+      status: 'pending'
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('submitCommunitySubject failed:', e.message);
+    return false;
+  }
+}
+
+async function fetchPendingCommunitySubjects() {
+  try {
+    const db = getDB();
+    if (!db) return [];
+    const { data, error } = await db.from('community_subjects')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('fetchPendingCommunitySubjects failed:', e.message);
+    return [];
+  }
+}
+
+async function fetchAcceptedCommunitySubjects() {
+  try {
+    const db = getDB();
+    if (!db) return [];
+    const { data, error } = await db.from('community_subjects')
+      .select('id, subject_name, author, category, created_at, questions_data')
+      .eq('status', 'accepted')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('fetchAcceptedCommunitySubjects failed:', e.message);
+    return [];
+  }
+}
+
+async function updateCommunitySubjectStatus(subjectId, status) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects')
+      .update({ status: status })
+      .eq('id', subjectId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('updateCommunitySubjectStatus failed:', e.message);
+    return false;
+  }
+}
+
+async function updateCommunitySubjectCategory(subjectId, category) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects')
+      .update({ category: category })
+      .eq('id', subjectId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('updateCommunitySubjectCategory failed:', e.message);
+    return false;
+  }
+}
+
+// ==========================================
+// SUPABASE STORAGE LOGIC
+// ==========================================
+
+const _signedUrlCache = new Map();
+
+function dataURLtoBlob(dataurl) {
+  let arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+      bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+  while(n--){
+      u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], {type:mime});
+}
+
+async function uploadRewardImage(base64Data, username) {
+  try {
+    const db = getDB();
+    if (!db) return null;
+    
+    const blob = dataURLtoBlob(base64Data);
+    const fileName = `${username}_${Date.now()}.webp`;
+    
+    const { data, error } = await db.storage
+      .from('reward_images')
+      .upload(fileName, blob, {
+        contentType: 'image/webp',
+        cacheControl: '3600',
+        upsert: false
+      });
+      
+    if (error) throw error;
+    return data.path;
+  } catch (e) {
+    console.error('uploadRewardImage failed:', e.message);
+    return null;
+  }
+}
+
+async function getRewardImageUrl(path) {
+  if (!path) return null;
+  // Backward compatibility for old base64 images stored in JSON
+  if (path.startsWith('data:image')) return path;
+  
+  if (_signedUrlCache.has(path)) {
+    const cached = _signedUrlCache.get(path);
+    // Refresh 1 hour before expiry (approx 24h validity)
+    if (Date.now() < cached.expiresAt - (60 * 60 * 1000)) {
+      return cached.url;
+    }
+  }
+
+  try {
+    const db = getDB();
+    if (!db) return null;
+    
+    // 24 hours validity
+    const { data, error } = await db.storage
+      .from('reward_images')
+      .createSignedUrl(path, 60 * 60 * 24);
+      
+    if (error) throw error;
+    
+    _signedUrlCache.set(path, {
+      url: data.signedUrl,
+      expiresAt: Date.now() + (60 * 60 * 24 * 1000)
+    });
+    
+    return data.signedUrl;
+  } catch (e) {
+    console.error('getRewardImageUrl failed:', e.message);
+    return null;
+  }
+}
 
 
 // --- File: js/storage.js ---
@@ -10302,7 +10463,7 @@ class StorageManager {
         wins: profile.stats?.duelWins || 0,
         total_duels: profile.stats?.duelsPlayed || 0,
         streak: profile.streakDays || 0,
-        badges: profile.unlockedAchievements || [],
+        badges: profile.selectedBadges || (profile.unlockedAchievements ? profile.unlockedAchievements.slice(0, 3) : []),
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
         lastActive: Date.now(),
@@ -10408,8 +10569,23 @@ class StorageManager {
     const profile = this.getProfile();
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return false;
     const { username, hashedKey } = profile.cloudAccount;
-    const cloudData = await fetchProfileFromCloud(username, hashedKey);
+
+    // Lightweight heartbeat check: only download profile if newer than our last sync
+    const cloudTimestamp = await checkCloudUpdateTimestamp();
+    const localTimestamp = parseInt(localStorage.getItem('remix_last_cloud_sync') || '0');
+    
+    if (cloudTimestamp <= localTimestamp && cloudTimestamp !== 0) {
+      return false; // Up to date, no need to download 1.6MB!
+    }
+
+    // Pass false to exclude subjects_data (saves 300KB)
+    const cloudData = await fetchProfileFromCloud(username, hashedKey, false);
     if (!cloudData) return false;
+
+    // Update local sync timestamp
+    if (cloudData.updated_at) {
+      localStorage.setItem('remix_last_cloud_sync', cloudData.updated_at.toString());
+    }
 
     if (cloudData.profile_data) {
       const currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
@@ -12211,7 +12387,7 @@ class AppController {
 
     this.setupFriendSystem();
 
-    // Periodic 30-second silent background cloud sync heartbeat
+    // Periodic 5-minute silent background cloud sync heartbeat (heavy profile sync)
     setInterval(async () => {
       const updated = await StorageManager.syncFromCloudSilent();
       if (updated) {
@@ -12221,12 +12397,45 @@ class AppController {
           this.renderSubjects();
         }
       }
-      // Poll friend notifications
+    }, 5 * 60 * 1000); // 5 minutes
+
+    // Poll friend notifications every 30 seconds (very light query, doesn't consume much egress)
+    setInterval(async () => {
       await this.pollFriendNotifications();
-    }, 30000);
+    }, 30000); // 30 seconds
 
     // Initial notification poll after short delay
     setTimeout(() => this.pollFriendNotifications(), 3000);
+
+    // Run background migration for legacy Base64 reward images
+    setTimeout(() => this.migrateLegacyBase64Rewards(), 5000);
+  }
+
+  async migrateLegacyBase64Rewards() {
+    const profile = StorageManager.getProfile();
+    let migrated = false;
+    const username = profile.cloudAccount?.username || 'anonyme';
+    
+    if (profile.customRewards && profile.customRewards.length > 0) {
+      for (let rew of profile.customRewards) {
+        if (rew.image && rew.image.startsWith('data:image')) {
+          console.log(`Migrating legacy base64 image for reward: ${rew.title}`);
+          // uploadRewardImage was imported at the top of the file
+          const path = await uploadRewardImage(rew.image, username);
+          if (path) {
+            rew.image = path;
+            migrated = true;
+          }
+        }
+      }
+    }
+    
+    if (migrated) {
+      console.log('Migration complete. Saving cleaned profile.');
+      StorageManager.saveProfile(profile);
+      // Force sync to cloud to clear base64 from Supabase DB immediately
+      await StorageManager.syncFromCloudSilent(); 
+    }
   }
 
 
@@ -12261,8 +12470,8 @@ class AppController {
       const row = document.createElement('div');
       row.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md);';
       row.innerHTML = `
-        <div style="font-size: 1.8rem;">${friend.avatar}</div>
-        <div style="flex: 1;">
+        <div style="font-size: 1.8rem; cursor: pointer;" class="friend-profile-trigger" data-username="${friend.username}">${friend.avatar}</div>
+        <div style="flex: 1; cursor: pointer;" class="friend-profile-trigger" data-username="${friend.username}">
           <div style="font-weight: 700; font-size: 0.95rem;">${friend.name}</div>
           <div style="font-size: 0.75rem; color: var(--text-secondary);">@${friend.username} · Niv. ${friend.level} · <span style="font-family: monospace; color: var(--accent-purple);">${friend.friendId}</span></div>
         </div>
@@ -12287,6 +12496,13 @@ class AppController {
         if (!confirm(`Retirer ${btn.dataset.username} de tes amis ?`)) return;
         await removeFriend(myUsername, btn.dataset.username);
         await this.renderFriends();
+      });
+    });
+    
+    container.querySelectorAll('.friend-profile-trigger').forEach(el => {
+      el.addEventListener('click', () => {
+        const friend = friends.find(f => f.username === el.dataset.username);
+        if (friend) this.openProfileModal(friend);
       });
     });
   }
@@ -12616,13 +12832,20 @@ class AppController {
     document.getElementById('header-level').textContent = `Niv. ${profile.level}`;
 
     const cloudUserEl = document.getElementById('header-cloud-user');
+    const adminBtn = document.getElementById('nav-admin-btn');
     if (cloudUserEl) {
       if (profile.cloudAccount?.username) {
         cloudUserEl.textContent = profile.cloudAccount.username;
         cloudUserEl.style.color = '#6ee7b7';
+        if (profile.cloudAccount.username === 'admin' && adminBtn) {
+          adminBtn.style.display = 'block';
+        } else if (adminBtn) {
+          adminBtn.style.display = 'none';
+        }
       } else {
         cloudUserEl.textContent = 'Connexion';
         cloudUserEl.style.color = '#fca5a5';
+        if (adminBtn) adminBtn.style.display = 'none';
       }
     }
   }
@@ -12666,6 +12889,8 @@ class AppController {
     if (viewId === 'duels-view') this.renderDuelsView();
     if (viewId === 'shop-view') this.renderShop();
     if (viewId === 'profile-view') this.renderProfile();
+    if (viewId === 'community-view') this.renderCommunitySubjects();
+    if (viewId === 'admin-view') this.renderAdminSubjects();
     if (viewId === 'revision-view') {
       const items = StorageManager.getRevisionItems();
       document.getElementById('revision-count').textContent = items.length;
@@ -14107,7 +14332,7 @@ class AppController {
     }
 
     customContainer.querySelectorAll('.btn-redeem').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-id');
         const reward = profile.customRewards.find(r => r.id === id);
         if (!reward) return;
@@ -14122,8 +14347,9 @@ class AppController {
             const imgTag = document.getElementById('show-reward-image');
             
             if (reward.image) {
-              imgTag.src = reward.image;
-              imgContainer.style.display = 'block';
+              const url = await getRewardImageUrl(reward.image);
+              imgTag.src = url || '';
+              imgContainer.style.display = url ? 'block' : 'none';
             } else {
               imgTag.src = '';
               imgContainer.style.display = 'none';
@@ -14235,23 +14461,160 @@ class AppController {
     const achContainer = document.getElementById('achievements-container');
     achContainer.innerHTML = '';
     const unlocked = new Set(profile.unlockedAchievements || []);
+    const selectedBadges = profile.selectedBadges || [];
 
     ACHIEVEMENTS.forEach(ach => {
       const isUnlocked = unlocked.has(ach.id);
+      const isSelected = selectedBadges.includes(ach.id);
+      
       const card = document.createElement('div');
-      card.className = 'shop-card';
+      card.className = `shop-card ${isSelected ? 'selected-badge' : ''}`;
       if (!isUnlocked) card.style.opacity = '0.4';
+      if (isSelected) card.style.borderColor = 'var(--accent-purple)';
+
+      let selectBtnHTML = '';
+      if (isUnlocked) {
+         selectBtnHTML = `<button class="btn-secondary btn-select-badge" data-id="${ach.id}" style="margin-top:0.5rem; font-size:0.75rem; padding: 0.3rem 0.5rem; width: 100%; border-color: ${isSelected ? 'var(--accent-red)' : 'var(--accent-cyan)'}; color: ${isSelected ? 'var(--accent-red)' : 'var(--accent-cyan)'};">${isSelected ? 'Retirer du profil' : 'Afficher sur le profil'}</button>`;
+      }
 
       card.innerHTML = `
         <div class="shop-icon">${ach.icon}</div>
         <div class="shop-item-title">${ach.title}</div>
         <div class="shop-item-desc">${ach.desc}</div>
-        <div class="level-badge">${isUnlocked ? 'Débloqué ✓' : 'Verrouillé 🔒'}</div>
+        <div class="level-badge" style="margin-bottom: 0.5rem;">${isUnlocked ? 'Débloqué ✓' : 'Verrouillé 🔒'}</div>
+        ${selectBtnHTML}
       `;
       achContainer.appendChild(card);
     });
 
+    // Wire up select badge buttons
+    achContainer.querySelectorAll('.btn-select-badge').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const achId = btn.dataset.id;
+        let sBadges = [...(profile.selectedBadges || [])];
+        if (sBadges.includes(achId)) {
+          sBadges = sBadges.filter(id => id !== achId);
+        } else {
+          if (sBadges.length >= 3) {
+            alert('Vous ne pouvez afficher que 3 badges maximum sur votre profil.');
+            return;
+          }
+          sBadges.push(achId);
+        }
+        profile.selectedBadges = sBadges;
+        StorageManager.saveProfile(profile);
+        this.renderProfile();
+      });
+    });
+  }
 
+  async renderCommunitySubjects() {
+    const container = document.getElementById('community-list-container');
+    if (!container) return;
+    container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Chargement des paquets...</div>';
+    
+    const subjects = await fetchAcceptedCommunitySubjects();
+    if (subjects.length === 0) {
+      container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Aucun paquet communautaire disponible pour le moment.</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    subjects.forEach(sub => {
+      const card = document.createElement('div');
+      card.style.background = 'var(--bg-card)';
+      card.style.border = '1px solid var(--border-color)';
+      card.style.padding = '1.25rem';
+      card.style.borderRadius = 'var(--radius-md)';
+      card.style.display = 'flex';
+      card.style.justifyContent = 'space-between';
+      card.style.alignItems = 'center';
+      card.style.flexWrap = 'wrap';
+      card.style.gap = '1rem';
+
+      card.innerHTML = `
+        <div>
+          <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${sub.subject_name}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${sub.questions_data.length} questions • ${sub.category}</div>
+        </div>
+        <button class="btn-primary btn-import-community" data-id="${sub.id}" style="padding: 0.5rem 1rem; font-size: 0.9rem;">⬇️ Importer</button>
+      `;
+
+      const btn = card.querySelector('.btn-import-community');
+      btn.onclick = () => {
+        const newSubject = {
+          id: `community_sub_${sub.id}_${Date.now()}`,
+          name: sub.subject_name,
+          pathParts: [sub.category, sub.subject_name],
+          icon: '🌐',
+          category: sub.category,
+          description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
+          questions: sub.questions_data
+        };
+        StorageManager.addSubject(newSubject);
+        btn.textContent = '✅ Importé !';
+        btn.style.backgroundColor = 'var(--accent-green)';
+        btn.disabled = true;
+      };
+
+      container.appendChild(card);
+    });
+  }
+
+  async renderAdminSubjects() {
+    const container = document.getElementById('admin-list-container');
+    if (!container) return;
+    container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Chargement des propositions en attente...</div>';
+    
+    const subjects = await fetchPendingCommunitySubjects();
+    if (subjects.length === 0) {
+      container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Aucune proposition en attente ! 🎉</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    subjects.forEach(sub => {
+      const card = document.createElement('div');
+      card.style.background = 'var(--bg-card)';
+      card.style.border = '1px solid var(--accent-amber)';
+      card.style.padding = '1.25rem';
+      card.style.borderRadius = 'var(--radius-md)';
+      card.style.marginBottom = '1rem';
+
+      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct_answer}`).join('<br>');
+
+      card.innerHTML = `
+        <div style="margin-bottom: 1rem;">
+          <div style="font-size: 1.1rem; font-weight: 700; color: white;">${sub.subject_name} <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-secondary);">par ${sub.author}</span></div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${sub.questions_data.length} questions</div>
+          <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-family: monospace; color: var(--accent-cyan); margin-bottom: 1rem; max-height: 100px; overflow-y: auto;">
+            ${qPreview} ...
+          </div>
+          <label style="font-size: 0.85rem; color: var(--text-secondary);">Catégorie :</label>
+          <input type="text" class="admin-cat-input" value="${sub.category}" style="padding: 0.4rem; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); width: 150px; margin-left: 0.5rem;">
+        </div>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button class="btn-primary btn-accept" style="background: var(--accent-green); border-color: var(--accent-green);">✅ Accepter</button>
+          <button class="btn-primary btn-reject" style="background: var(--accent-red); border-color: var(--accent-red);">❌ Refuser</button>
+        </div>
+      `;
+
+      card.querySelector('.btn-accept').onclick = async () => {
+        const cat = card.querySelector('.admin-cat-input').value;
+        await updateCommunitySubjectCategory(sub.id, cat);
+        await updateCommunitySubjectStatus(sub.id, 'accepted');
+        card.remove();
+      };
+
+      card.querySelector('.btn-reject').onclick = async () => {
+        if(confirm("Refuser et supprimer définitivement cette proposition ?")) {
+          await updateCommunitySubjectStatus(sub.id, 'rejected');
+          card.remove();
+        }
+      };
+
+      container.appendChild(card);
+    });
   }
 
   setupCSVImporter() {
@@ -14312,7 +14675,30 @@ class AppController {
         resultBox.innerHTML = `
           <h4 style="color: var(--accent-green);">✅ Importation réussie !</h4>
           <p>${res.count} cartes/questions ajoutées avec succès à la matière "${subjectName}".</p>
+          <button id="btn-submit-community" class="btn-primary" style="margin-top: 1rem; width: 100%; font-size: 0.9rem;">
+            🌐 Soumettre à la communauté
+          </button>
         `;
+        
+        const btnSubmit = document.getElementById('btn-submit-community');
+        if (btnSubmit) {
+          btnSubmit.onclick = async () => {
+            btnSubmit.disabled = true;
+            btnSubmit.textContent = 'Envoi en cours...';
+            const profile = StorageManager.getProfile();
+            const author = profile.cloudAccount?.username || 'Anonyme';
+            const category = res.isAnkiDeck ? 'Anki' : 'CSV';
+            const success = await submitCommunitySubject(subjectName, author, category, newSubject.questions);
+            if (success) {
+              btnSubmit.style.backgroundColor = 'var(--accent-green)';
+              btnSubmit.textContent = '✅ Envoyé pour modération !';
+            } else {
+              btnSubmit.disabled = false;
+              btnSubmit.textContent = '❌ Erreur lors de l\'envoi (Réessayer)';
+            }
+          };
+        }
+
         this.renderCategoryFilters();
         this.renderSubjects();
       } else {
@@ -14753,10 +15139,11 @@ class AppController {
       if (modal) modal.classList.remove('active');
     });
 
-    safeOn('btn-modal-save-reward', 'click', () => {
+    safeOn('btn-modal-save-reward', 'click', async () => {
       const titleInput = document.getElementById('input-reward-title');
       const costInput = document.getElementById('input-reward-cost');
-      if (!titleInput || !costInput) return;
+      const btn = document.getElementById('btn-modal-save-reward');
+      if (!titleInput || !costInput || !btn) return;
 
       const title = titleInput.value.trim();
       const cost = parseInt(costInput.value, 10);
@@ -14767,11 +15154,27 @@ class AppController {
       }
 
       const profile = StorageManager.getProfile();
+      let imagePath = currentCompressedImage;
+      
+      if (currentCompressedImage) {
+        btn.disabled = true;
+        btn.textContent = "Upload en cours...";
+        const username = profile.cloudAccount?.username || 'anonyme';
+        const path = await uploadRewardImage(currentCompressedImage, username);
+        if (path) {
+          imagePath = path;
+        } else {
+          alert("Erreur lors de l'upload de l'image. Elle sera stockée localement uniquement.");
+        }
+        btn.disabled = false;
+        btn.textContent = "Créer la récompense";
+      }
+
       profile.customRewards.push({
         id: `rew_${Date.now()}`,
         title: title,
         cost: cost,
-        image: currentCompressedImage,
+        image: imagePath,
         redeemedCount: 0
       });
 
@@ -14940,6 +15343,7 @@ function startApp() {
       });
 
       // Refresh views without re-running init (avoids duplicate listeners)
+      app.switchView('home-view');
       app.applyUserTheme();
       app.renderSubjects();
       app.renderShop();

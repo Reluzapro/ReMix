@@ -1,6 +1,6 @@
 // Storage module for persistent user data, custom subjects, SRS spacing (Anki decay intervals), statistics, Real Supabase Cloud Database sync, and Anti-Cheat Checksum auto-purge
 import { DEFAULT_SUBJECTS } from './questionsData.js';
-import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData, saveFriendId, cloudSignUp, cloudSignIn, cloudResetPassword, cloudSignOut } from './cloudDB.js';
+import { pushPlayerToCloud, pushProfileToCloud, fetchProfileFromCloud, mergeProfileData, mergeSubjectsData, saveFriendId, cloudSignUp, cloudSignIn, cloudResetPassword, cloudSignOut, checkCloudUpdateTimestamp } from './cloudDB.js';
 
 const STORAGE_KEYS = {
   SUBJECTS: 'rev_game_subjects_v6',
@@ -182,7 +182,7 @@ export class StorageManager {
         wins: profile.stats?.duelWins || 0,
         total_duels: profile.stats?.duelsPlayed || 0,
         streak: profile.streakDays || 0,
-        badges: profile.unlockedAchievements || [],
+        badges: profile.selectedBadges || (profile.unlockedAchievements ? profile.unlockedAchievements.slice(0, 3) : []),
         avatar: profile.avatar || '🎓',
         checksumToken: profile.checksumToken,
         lastActive: Date.now(),
@@ -288,8 +288,23 @@ export class StorageManager {
     const profile = this.getProfile();
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return false;
     const { username, hashedKey } = profile.cloudAccount;
-    const cloudData = await fetchProfileFromCloud(username, hashedKey);
+
+    // Lightweight heartbeat check: only download profile if newer than our last sync
+    const cloudTimestamp = await checkCloudUpdateTimestamp();
+    const localTimestamp = parseInt(localStorage.getItem('remix_last_cloud_sync') || '0');
+    
+    if (cloudTimestamp <= localTimestamp && cloudTimestamp !== 0) {
+      return false; // Up to date, no need to download 1.6MB!
+    }
+
+    // Pass false to exclude subjects_data (saves 300KB)
+    const cloudData = await fetchProfileFromCloud(username, hashedKey, false);
     if (!cloudData) return false;
+
+    // Update local sync timestamp
+    if (cloudData.updated_at) {
+      localStorage.setItem('remix_last_cloud_sync', cloudData.updated_at.toString());
+    }
 
     if (cloudData.profile_data) {
       const currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
