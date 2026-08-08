@@ -5,7 +5,7 @@ import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS, EXCLUSIVE_EMOJIS } from '
 import { CSVParser } from './csvParser.js';
 import { SoundFX } from './audio.js';
 import { MultiplayerEngine } from './multiplayer.js';
-import { lookupByFriendId, addFriend, getFriends, removeFriend, sendFriendNotification, getMyNotifications, markNotificationRead, getDB, submitCommunitySubject, fetchPendingCommunitySubjects, fetchAcceptedCommunitySubjects, updateCommunitySubjectStatus, updateCommunitySubjectCategory, uploadRewardImage, getRewardImageUrl } from './cloudDB.js';
+import { lookupByFriendId, addFriend, getFriends, removeFriend, sendFriendNotification, getMyNotifications, markNotificationRead, getDB, submitCommunitySubject, fetchPendingCommunitySubjects, fetchAcceptedCommunitySubjects, updateCommunitySubjectStatus, updateCommunitySubjectCategory, uploadRewardImage, getRewardImageUrl, deleteCommunitySubject } from './cloudDB.js';
 
 const safeOn = (id, event, fn) => {
   const el = document.getElementById(id);
@@ -29,7 +29,23 @@ class AppController {
   }
 
   init() {
-    GamificationEngine.checkDailyLogin(StorageManager.getProfile()).then((loginReward) => {
+    const profile = StorageManager.getProfile();
+    
+    // Unlock everything for admin
+    if (profile.name && profile.name.toLowerCase() === 'admin') {
+      import('./gamification.js').then(({ SHOP_ITEMS }) => {
+        let dirty = false;
+        SHOP_ITEMS.forEach(item => {
+          if (!profile.purchasedItems.includes(item.id)) {
+            profile.purchasedItems.push(item.id);
+            dirty = true;
+          }
+        });
+        if (dirty) StorageManager.saveProfile(profile);
+      });
+    }
+
+    GamificationEngine.checkDailyLogin(profile).then((loginReward) => {
       this.updateHeaderStats();
       if (loginReward) {
         this.showDailyRewardPopup(loginReward);
@@ -583,6 +599,9 @@ class AppController {
     });
 
     document.getElementById('search-subject-input').addEventListener('input', () => this.renderSubjects());
+    
+    const commSearch = document.getElementById('community-search-input');
+    if (commSearch) commSearch.addEventListener('input', () => this.renderCommunitySubjects());
   }
 
   renderSubjects() {
@@ -738,6 +757,7 @@ class AppController {
       <div class="subject-footer">
         <span>${qCount} Cartes</span>
         <div style="display: flex; gap: 0.4rem;">
+          <button class="btn-secondary btn-organize-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Déplacer vers un dossier">⚙️ Organiser</button>
           <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
         </div>
       </div>
@@ -746,6 +766,22 @@ class AppController {
     card.querySelector('.btn-start-quiz').addEventListener('click', (e) => {
       e.stopPropagation();
       this.startQuiz(sub.id, 'classic');
+    });
+
+    card.querySelector('.btn-organize-deck').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const currentPath = (sub.pathParts || [sub.name]).join(' / ');
+      const newPathStr = prompt('Modifiez le chemin du dossier (séparez les dossiers par des barres obliques " / ") :', currentPath);
+      if (newPathStr !== null && newPathStr.trim() !== '') {
+        const newPathParts = newPathStr.split('/').map(p => p.trim()).filter(p => p);
+        if (newPathParts.length > 0) {
+          sub.pathParts = newPathParts;
+          const subjects = StorageManager.getSubjects();
+          subjects[sub.id] = sub;
+          StorageManager.saveSubjects(subjects);
+          this.renderSubjects();
+        }
+      }
     });
 
     container.appendChild(card);
@@ -1938,6 +1974,22 @@ class AppController {
     const levelupEl = document.getElementById('res-levelup-banner');
     levelupEl.style.display = summary.leveledUp ? 'block' : 'none';
 
+    let unverifiedBanner = document.getElementById('res-unverified-banner');
+    if (!unverifiedBanner) {
+      unverifiedBanner = document.createElement('div');
+      unverifiedBanner.id = 'res-unverified-banner';
+      unverifiedBanner.style.padding = '0.75rem';
+      unverifiedBanner.style.marginTop = '1rem';
+      unverifiedBanner.style.borderRadius = '8px';
+      unverifiedBanner.style.backgroundColor = 'rgba(255, 204, 0, 0.1)';
+      unverifiedBanner.style.border = '1px solid #ffcc00';
+      unverifiedBanner.style.color = '#ffcc00';
+      unverifiedBanner.style.textAlign = 'center';
+      unverifiedBanner.innerHTML = '⚠️ <b>Mode Entraînement :</b> Ce paquet n\'est pas vérifié par la communauté. Vous ne gagnez ni pièces ni XP.';
+      levelupEl.parentNode.insertBefore(unverifiedBanner, levelupEl.nextSibling);
+    }
+    unverifiedBanner.style.display = summary.isUnverified ? 'block' : 'none';
+
     this.switchView('results-view');
 
     document.getElementById('btn-results-retry').onclick = () => {
@@ -2182,7 +2234,16 @@ class AppController {
     }
 
     container.innerHTML = '';
+    const searchQuery = (document.getElementById('community-search-input')?.value || '').toLowerCase().trim();
+
     subjects.forEach(sub => {
+      if (searchQuery) {
+        const nameMatch = sub.subject_name.toLowerCase().includes(searchQuery);
+        const authorMatch = sub.author.toLowerCase().includes(searchQuery);
+        const catMatch = sub.category.toLowerCase().includes(searchQuery);
+        if (!nameMatch && !authorMatch && !catMatch) return;
+      }
+
       const card = document.createElement('div');
       card.style.background = 'var(--bg-card)';
       card.style.border = '1px solid var(--border-color)';
@@ -2194,12 +2255,26 @@ class AppController {
       card.style.flexWrap = 'wrap';
       card.style.gap = '1rem';
 
+      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+
+      let adminDeleteBtn = '';
+      const profile = StorageManager.getProfile();
+      if (profile && profile.name && profile.name.toLowerCase() === 'admin') {
+        adminDeleteBtn = `<button class="btn-primary btn-delete-community" data-id="${sub.id}" style="padding: 0.5rem 1rem; font-size: 0.9rem; background-color: var(--accent-red); margin-left: 0.5rem;">🗑️ Supprimer</button>`;
+      }
+
       card.innerHTML = `
-        <div>
+        <div style="flex: 1;">
           <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${sub.subject_name}</div>
           <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${sub.questions_data.length} questions • ${sub.category}</div>
+          <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; border-left: 2px solid var(--accent-cyan); padding-left: 0.5rem;">
+            ${qPreview} ...
+          </div>
         </div>
-        <button class="btn-primary btn-import-community" data-id="${sub.id}" style="padding: 0.5rem 1rem; font-size: 0.9rem;">⬇️ Importer</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn-primary btn-import-community" data-id="${sub.id}" style="padding: 0.5rem 1rem; font-size: 0.9rem;">⬇️ Importer</button>
+          ${adminDeleteBtn}
+        </div>
       `;
 
       const btn = card.querySelector('.btn-import-community');
@@ -2211,6 +2286,7 @@ class AppController {
           icon: '🌐',
           category: sub.category,
           description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
+          verified: true,
           questions: sub.questions_data
         };
         StorageManager.addSubject(newSubject);
@@ -2218,6 +2294,24 @@ class AppController {
         btn.style.backgroundColor = 'var(--accent-green)';
         btn.disabled = true;
       };
+
+      const btnDelete = card.querySelector('.btn-delete-community');
+      if (btnDelete) {
+        btnDelete.onclick = async () => {
+          if (!confirm(`Supprimer définitivement le paquet "${sub.subject_name}" de la communauté ?`)) return;
+          btnDelete.disabled = true;
+          btnDelete.textContent = 'Suppression...';
+          const ok = await deleteCommunitySubject(sub.id);
+          if (ok) {
+            alert('Paquet supprimé de la communauté.');
+            this.renderCommunitySubjects();
+          } else {
+            alert('Erreur lors de la suppression.');
+            btnDelete.disabled = false;
+            btnDelete.textContent = '🗑️ Supprimer';
+          }
+        };
+      }
 
       container.appendChild(card);
     });
@@ -2243,7 +2337,7 @@ class AppController {
       card.style.borderRadius = 'var(--radius-md)';
       card.style.marginBottom = '1rem';
 
-      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct_answer}`).join('<br>');
+      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
 
       card.innerHTML = `
         <div style="margin-bottom: 1rem;">
@@ -2330,6 +2424,7 @@ class AppController {
           description: res.isAnkiDeck
             ? `Importé depuis Anki (${res.count} cartes avec fausses réponses auto-générées).`
             : `Cours importé avec ${res.count} questions.`,
+          verified: false,
           questions: res.questions
         };
 

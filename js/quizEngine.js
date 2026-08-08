@@ -248,7 +248,10 @@ export class QuizEngine {
     let xpEarned = Math.max(0, Math.floor(this.currentSession.score / 4));
     let coinsEarned = Math.round(correct * 3) + (accuracy === 100 ? 25 : 0);
 
-    if (this.currentSession.mode === 'revision') {
+    const subject = StorageManager.getSubjects()[this.currentSession.subjectId];
+    const isUnverified = subject && subject.verified === false;
+
+    if (this.currentSession.mode === 'revision' || isUnverified) {
       this.currentSession.score = 0;
       xpEarned = 0;
       coinsEarned = 0;
@@ -278,7 +281,8 @@ export class QuizEngine {
       coinsEarned: coinsEarned,
       leveledUp: leveledUp,
       newAchievements: newAchievements,
-      history: this.currentSession.history
+      history: this.currentSession.history,
+      isUnverified: isUnverified
     };
 
     this.currentSession = null;

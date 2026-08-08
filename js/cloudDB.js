@@ -512,6 +512,21 @@ export async function updateCommunitySubjectStatus(subjectId, status) {
   }
 }
 
+export async function deleteCommunitySubject(subjectId) {
+  try {
+    const db = getDB();
+    if (!db) return false;
+    const { error } = await db.from('community_subjects')
+      .delete()
+      .eq('id', subjectId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('deleteCommunitySubject failed:', e.message);
+    return false;
+  }
+}
+
 export async function updateCommunitySubjectCategory(subjectId, category) {
   try {
     const db = getDB();
