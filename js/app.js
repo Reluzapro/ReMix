@@ -761,6 +761,7 @@ class AppController {
           <span>${folder.questionCount} cartes au total</span>
           <div style="display: flex; gap: 0.4rem;">
             <button class="btn-secondary btn-share-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
+            <button class="btn-secondary btn-delete-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce dossier">🗑️</button>
             <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
           </div>
         </div>
@@ -771,7 +772,46 @@ class AppController {
         this.shareFolderToCommunity(folder.name, folder.decks);
       });
 
-      card.addEventListener('click', () => {
+      card.querySelector('.btn-delete-folder').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`Voulez-vous vraiment supprimer le dossier "${folder.name}" et TOUT son contenu (${folder.deckCount} éléments) ?`)) {
+          // Delete from custom folders
+          const profile = StorageManager.getProfile();
+          if (profile.customFolders) {
+            profile.customFolders = profile.customFolders.filter(cf => {
+              // Same depth and same name
+              if (cf.pathParts.length !== this.currentFolderPath.length + 1) return true;
+              if (cf.pathParts[cf.pathParts.length - 1] !== folder.name) return true;
+              // Check parents
+              for (let i = 0; i < this.currentFolderPath.length; i++) {
+                if (cf.pathParts[i] !== this.currentFolderPath[i]) return true;
+              }
+              return false; // exclude this one
+            });
+            StorageManager.saveProfile(profile);
+          }
+
+          // Delete all subjects inside this folder
+          const subjects = StorageManager.getSubjects();
+          let subjectsModified = false;
+          
+          folder.decks.forEach(sub => {
+            if (subjects[sub.id]) {
+              delete subjects[sub.id];
+              subjectsModified = true;
+            }
+          });
+
+          if (subjectsModified) {
+            StorageManager.saveSubjects(subjects);
+          }
+
+          this.renderSubjects();
+        }
+      });
+
+      card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
         this.currentFolderPath.push(folder.name);
         this.renderSubjects();
         SoundFX.playClick();
