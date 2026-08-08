@@ -101,9 +101,21 @@
     <section id="subjects-view" class="view-section active">
       <div class="section-title">
         <span>Vos Cours & Paquets de Révision</span>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="btn-secondary" id="btn-create-folder" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">📁 Nouveau Dossier</button>
+          <button class="btn-secondary" id="btn-toggle-select" style="border-color: var(--text-secondary); color: white;">✅ Sélectionner</button>
           <button class="btn-secondary" id="btn-daily-quests" style="border-color: var(--accent-orange); color: var(--accent-orange);">🎯 Missions du Jour</button>
           <button class="btn-primary" id="btn-quick-play">⚡ Partie Rapide</button>
+        </div>
+      </div>
+      
+      <!-- Selection Action Bar (Hidden by default) -->
+      <div id="selection-action-bar" style="display: none; background: rgba(30, 41, 59, 0.95); border: 1px solid var(--accent-cyan); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; justify-content: space-between; position: sticky; top: 1rem; z-index: 100; backdrop-filter: blur(10px);">
+        <div style="font-weight: 600; color: white;"><span id="selection-count">0</span> élément(s) sélectionné(s)</div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="btn-selection-move" class="btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">⚙️ Déplacer</button>
+          <button id="btn-selection-delete" class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: #ef4444;">🗑️ Supprimer</button>
+          <button id="btn-selection-cancel" class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">❌ Annuler</button>
         </div>
       </div>
 
@@ -848,6 +860,20 @@
       </div>
 
       <button class="btn-primary" id="btn-modal-profile-add-friend" style="width: 100%; display: none;">➕ Demander en ami</button>
+    </div>
+  </div>
+
+  <!-- Modal Admin Preview -->
+  <div class="modal-overlay" id="modal-admin-qcm-preview">
+    <div class="modal-card glass-panel" style="max-width: 600px; width: 95%; max-height: 80vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.3rem; margin: 0;">👀 Aperçu du Paquet</h2>
+        <button class="btn-secondary" onclick="document.getElementById('modal-admin-qcm-preview').classList.remove('active')" style="padding: 0.4rem 0.8rem; border-radius: 50%;">✕</button>
+      </div>
+      <div id="admin-qcm-preview-content" style="display: flex; flex-direction: column; gap: 1rem;">
+        <!-- Injected via JS -->
+      </div>
+      <button class="btn-primary" style="width: 100%; margin-top: 1rem;" onclick="document.getElementById('modal-admin-qcm-preview').classList.remove('active');">Fermer l'aperçu</button>
     </div>
   </div>
 

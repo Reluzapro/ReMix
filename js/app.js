@@ -16,6 +16,18 @@ const safeOn = (id, event, fn) => {
 class AppController {
   constructor() {
     this.quizEngine = new QuizEngine();
+    this.currentView = 'subjects-view';
+    this.currentFolderPath = [];
+    this._eventListenersSetup = false;
+    this.pendingNewQuiz = null;
+
+    // Selection mode state
+    this.isSelectMode = false;
+    this.selectedSubjects = new Set();
+    
+    // Profile sync
+    StorageManager.subscribe(() => { this.renderHeaderStats(); this.updatePausedBanner(); });
+
     this.timerInterval = null;
     this.currentSubjectId = null;
     this.flashcardSession = null;
@@ -635,9 +647,39 @@ class AppController {
       return;
     }
 
+    // Toggle Action bar if select mode
+    const actionBar = document.getElementById('selection-action-bar');
+    if (actionBar) {
+      actionBar.style.display = this.isSelectMode ? 'flex' : 'none';
+      if (this.isSelectMode) {
+        document.getElementById('selection-count').textContent = this.selectedSubjects.size;
+      }
+    }
+
     const currentDepth = this.currentFolderPath.length;
     const subfoldersMap = new Map();
     const directDecks = [];
+    
+    // Inject custom folders
+    const profile = StorageManager.getProfile();
+    if (profile.customFolders) {
+      profile.customFolders.forEach(cf => {
+        if (cf.pathParts.length === currentDepth + 1) {
+          let matches = true;
+          for (let i = 0; i < currentDepth; i++) {
+            if (cf.pathParts[i] !== this.currentFolderPath[i]) {
+              matches = false; break;
+            }
+          }
+          if (matches) {
+            const folderName = cf.pathParts[currentDepth];
+            if (!subfoldersMap.has(folderName)) {
+              subfoldersMap.set(folderName, { name: folderName, deckCount: 0, questionCount: 0, decks: [], customIcon: cf.icon });
+            }
+          }
+        }
+      });
+    }
 
     Object.values(subjects).forEach(sub => {
       if (selectedCategory !== 'ALL' && sub.category !== selectedCategory) return;
@@ -693,11 +735,18 @@ class AppController {
     subfoldersMap.forEach(folder => {
       const card = document.createElement('div');
       card.className = 'folder-card';
-      const icon = folder.name.toLowerCase().includes('anglais') ? '🇬🇧' : (folder.name.toLowerCase().includes('math') ? '📐' : '📁');
+      const icon = folder.customIcon || (folder.name.toLowerCase().includes('anglais') ? '🇬🇧' : (folder.name.toLowerCase().includes('math') ? '📐' : '📁'));
 
       const fMastery = StorageManager.getFolderMastery(folder.decks);
       if (fMastery.borderStyle) card.style.border = fMastery.borderStyle;
       if (fMastery.boxShadow) card.style.boxShadow = fMastery.boxShadow;
+
+      let checkboxHTML = '';
+      if (this.isSelectMode) {
+        // Can't select folders for now, or maybe we can? 
+        // For simplicity, we only select subjects. Wait, if they want to move a folder, it's easier to select subjects.
+        // I won't add checkboxes on folders.
+      }
 
       card.innerHTML = `
         <div>
@@ -710,9 +759,17 @@ class AppController {
         </div>
         <div class="folder-meta">
           <span>${folder.questionCount} cartes au total</span>
-          <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn-secondary btn-share-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
+            <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
+          </div>
         </div>
       `;
+
+      card.querySelector('.btn-share-folder').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.shareFolderToCommunity(folder.name, folder.decks);
+      });
 
       card.addEventListener('click', () => {
         this.currentFolderPath.push(folder.name);
@@ -740,13 +797,26 @@ class AppController {
     if (dMastery.borderStyle) card.style.border = dMastery.borderStyle;
     if (dMastery.boxShadow) card.style.boxShadow = dMastery.boxShadow;
 
+    let checkboxHTML = '';
+    if (this.isSelectMode) {
+      const isSelected = this.selectedSubjects.has(sub.id);
+      checkboxHTML = `<input type="checkbox" class="subject-checkbox" ${isSelected ? 'checked' : ''} style="transform: scale(1.5); cursor: pointer;">`;
+      if (isSelected) {
+        card.style.border = '2px solid var(--accent-cyan)';
+        card.style.background = 'rgba(6, 182, 212, 0.1)';
+      }
+    }
+
     card.innerHTML = `
       <div>
         <div class="subject-header">
           <span class="subject-icon">${sub.icon || '📚'}</span>
           <div style="overflow: hidden; flex: 1;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.25rem;">
-              <h3 class="subject-title" style="font-size: 1.1rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${cleanName}</h3>
+              <div style="display: flex; gap: 0.5rem; align-items: center; overflow: hidden;">
+                ${checkboxHTML}
+                <h3 class="subject-title" style="font-size: 1.1rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${cleanName}</h3>
+              </div>
               <span class="level-badge" style="background: rgba(0,0,0,0.4); border: 1px solid ${dMastery.colorHex}; color: ${dMastery.colorHex}; font-size: 0.75rem; white-space: nowrap;">${dMastery.statusText}</span>
             </div>
             <span class="level-badge" style="background: rgba(255,255,255,0.1); color: var(--accent-cyan); font-size: 0.75rem;">${sub.category || 'Général'}</span>
@@ -758,10 +828,35 @@ class AppController {
         <span>${qCount} Cartes</span>
         <div style="display: flex; gap: 0.4rem;">
           <button class="btn-secondary btn-organize-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Déplacer vers un dossier">⚙️ Organiser</button>
+          <button class="btn-secondary btn-delete-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce paquet">🗑️</button>
           <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
         </div>
       </div>
     `;
+
+    if (this.isSelectMode) {
+      card.addEventListener('click', (e) => {
+        // Prevent toggle if clicking on buttons
+        if (e.target.tagName === 'BUTTON') return;
+        
+        if (this.selectedSubjects.has(sub.id)) {
+          this.selectedSubjects.delete(sub.id);
+        } else {
+          this.selectedSubjects.add(sub.id);
+        }
+        this.renderSubjects();
+      });
+    }
+
+    card.querySelector('.btn-delete-deck').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`Voulez-vous vraiment supprimer le paquet "${sub.name}" ?`)) {
+        const subjects = StorageManager.getSubjects();
+        delete subjects[sub.id];
+        StorageManager.saveSubjects(subjects);
+        this.renderSubjects();
+      }
+    });
 
     card.querySelector('.btn-start-quiz').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -785,6 +880,40 @@ class AppController {
     });
 
     container.appendChild(card);
+  }
+
+  async shareFolderToCommunity(folderName, decks) {
+    const profile = StorageManager.getProfile();
+    const author = profile.cloudAccount?.username || profile.name || 'Joueur Anonyme';
+
+    if (!confirm(`Partager le dossier "${folderName}" (contenant ${decks.length} cours) à la communauté ?`)) return;
+
+    const folderData = {
+      is_folder: true,
+      subjects: decks
+    };
+
+    const category = prompt(`Catégorie pour le dossier "${folderName}" :`, 'Général') || 'Général';
+    
+    // Check total size
+    const jsonStr = JSON.stringify(folderData);
+    if (jsonStr.length > 5000000) {
+      alert("Le dossier est trop volumineux pour être partagé en une seule fois (max ~5MB).");
+      return;
+    }
+
+    const btn = document.querySelector(`.btn-share-folder[data-folder="${folderName}"]`);
+    if (btn) btn.textContent = '⏳...';
+
+    const success = await submitCommunitySubject(folderName, author, category, folderData);
+    
+    if (success) {
+      alert('Dossier soumis à la communauté avec succès ! Il sera disponible après validation.');
+      if (btn) { btn.textContent = '✅'; btn.disabled = true; }
+    } else {
+      alert('Erreur lors de la soumission du dossier.');
+      if (btn) btn.textContent = '🌐';
+    }
   }
 
   async renderDuelsView() {
@@ -2255,7 +2384,13 @@ class AppController {
       card.style.flexWrap = 'wrap';
       card.style.gap = '1rem';
 
-      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+      const isFolder = sub.questions_data.is_folder === true;
+      const qPreview = isFolder 
+        ? `${sub.questions_data.subjects.length} cours inclus dans ce dossier.`
+        : sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+      
+      const itemDesc = isFolder ? `${sub.questions_data.subjects.length} cours` : `${sub.questions_data.length} questions`;
+      const itemIcon = isFolder ? '📁' : '📄';
 
       let adminDeleteBtn = '';
       const profile = StorageManager.getProfile();
@@ -2265,10 +2400,10 @@ class AppController {
 
       card.innerHTML = `
         <div style="flex: 1;">
-          <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${sub.subject_name}</div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${sub.questions_data.length} questions • ${sub.category}</div>
+          <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${itemIcon} ${sub.subject_name}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${itemDesc} • ${sub.category}</div>
           <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; border-left: 2px solid var(--accent-cyan); padding-left: 0.5rem;">
-            ${qPreview} ...
+            ${qPreview} ${isFolder ? '' : '...'}
           </div>
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -2279,17 +2414,30 @@ class AppController {
 
       const btn = card.querySelector('.btn-import-community');
       btn.onclick = () => {
-        const newSubject = {
-          id: `community_sub_${sub.id}_${Date.now()}`,
-          name: sub.subject_name,
-          pathParts: [sub.category, sub.subject_name],
-          icon: '🌐',
-          category: sub.category,
-          description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
-          verified: true,
-          questions: sub.questions_data
-        };
-        StorageManager.addSubject(newSubject);
+        if (isFolder) {
+          sub.questions_data.subjects.forEach((nestedSub, idx) => {
+            const newSubject = {
+              ...nestedSub,
+              id: `community_sub_${sub.id}_${idx}_${Date.now()}`,
+              description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
+              verified: true
+            };
+            StorageManager.addSubject(newSubject);
+          });
+        } else {
+          const newSubject = {
+            id: `community_sub_${sub.id}_${Date.now()}`,
+            name: sub.subject_name,
+            pathParts: [sub.category, sub.subject_name],
+            icon: '🌐',
+            category: sub.category,
+            description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
+            verified: true,
+            questions: sub.questions_data
+          };
+          StorageManager.addSubject(newSubject);
+        }
+        
         btn.textContent = '✅ Importé !';
         btn.style.backgroundColor = 'var(--accent-green)';
         btn.disabled = true;
@@ -2317,6 +2465,47 @@ class AppController {
     });
   }
 
+  openAdminPreview(sub) {
+    const modal = document.getElementById('modal-admin-qcm-preview');
+    const content = document.getElementById('admin-qcm-preview-content');
+    
+    content.innerHTML = '';
+    
+    const isFolder = sub.questions_data.is_folder === true;
+    
+    if (isFolder) {
+      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Dossier : ${sub.subject_name} (${sub.questions_data.subjects.length} cours)</h3>`;
+      sub.questions_data.subjects.forEach((nestedSub, idx) => {
+        let html = `<div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1rem;">`;
+        html += `<h4 style="margin-bottom: 0.5rem; color: white;">Cours ${idx + 1} : ${nestedSub.name}</h4>`;
+        if (nestedSub.questions) {
+          nestedSub.questions.forEach((q, qIdx) => {
+            const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
+            html += `<div style="font-size: 0.85rem; margin-bottom: 0.25rem; border-left: 2px solid var(--accent-green); padding-left: 0.5rem;"><span style="color: var(--text-secondary);">Q${qIdx+1}:</span> ${q.question} <br> <span style="color: var(--text-secondary);">R:</span> <span style="color: var(--accent-green);">${ans}</span></div>`;
+          });
+        }
+        html += `</div>`;
+        content.innerHTML += html;
+      });
+    } else {
+      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Paquet : ${sub.subject_name} (${sub.questions_data.length} questions)</h3>`;
+      sub.questions_data.forEach((q, qIdx) => {
+        const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
+        const wrongAns = q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : '');
+        let html = `<div style="font-size: 0.9rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">`;
+        html += `<div style="margin-bottom: 0.25rem;"><strong>Q${qIdx+1}:</strong> ${q.question}</div>`;
+        html += `<div style="color: var(--accent-green);"><strong>Vrai:</strong> ${ans}</div>`;
+        if (wrongAns) {
+          html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+        }
+        html += `</div>`;
+        content.innerHTML += html;
+      });
+    }
+
+    modal.classList.add('active');
+  }
+
   async renderAdminSubjects() {
     const container = document.getElementById('admin-list-container');
     if (!container) return;
@@ -2337,7 +2526,10 @@ class AppController {
       card.style.borderRadius = 'var(--radius-md)';
       card.style.marginBottom = '1rem';
 
-      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+      const isFolder = sub.questions_data.is_folder === true;
+      const qPreview = isFolder 
+        ? `${sub.questions_data.subjects.length} cours inclus.`
+        : sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
 
       card.innerHTML = `
         <div style="margin-bottom: 1rem;">
@@ -2350,10 +2542,15 @@ class AppController {
           <input type="text" class="admin-cat-input" value="${sub.category}" style="padding: 0.4rem; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); width: 150px; margin-left: 0.5rem;">
         </div>
         <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button class="btn-primary btn-preview" style="background: var(--accent-blue); border-color: var(--accent-blue);">👀 Voir Détaillé</button>
           <button class="btn-primary btn-accept" style="background: var(--accent-green); border-color: var(--accent-green);">✅ Accepter</button>
           <button class="btn-primary btn-reject" style="background: var(--accent-red); border-color: var(--accent-red);">❌ Refuser</button>
         </div>
       `;
+
+      card.querySelector('.btn-preview').onclick = () => {
+        this.openAdminPreview(sub);
+      };
 
       card.querySelector('.btn-accept').onclick = async () => {
         const cat = card.querySelector('.admin-cat-input').value;
@@ -2487,6 +2684,66 @@ class AppController {
     });
 
     // Quiz Pause & Resume Buttons
+
+    // --- Selection Mode ---
+    safeOn('btn-toggle-select', 'click', () => {
+      this.isSelectMode = !this.isSelectMode;
+      if (!this.isSelectMode) this.selectedSubjects.clear();
+      this.renderSubjects();
+    });
+
+    safeOn('btn-selection-cancel', 'click', () => {
+      this.isSelectMode = false;
+      this.selectedSubjects.clear();
+      this.renderSubjects();
+    });
+
+    safeOn('btn-selection-delete', 'click', () => {
+      if (this.selectedSubjects.size === 0) return;
+      if (confirm(`Voulez-vous vraiment supprimer les ${this.selectedSubjects.size} éléments sélectionnés ?`)) {
+        const subjects = StorageManager.getSubjects();
+        this.selectedSubjects.forEach(id => delete subjects[id]);
+        StorageManager.saveSubjects(subjects);
+        this.selectedSubjects.clear();
+        this.isSelectMode = false;
+        this.renderSubjects();
+      }
+    });
+
+    safeOn('btn-selection-move', 'click', () => {
+      if (this.selectedSubjects.size === 0) return;
+      const subjects = StorageManager.getSubjects();
+      
+      const newPathStr = prompt('Vers quel dossier voulez-vous déplacer la sélection ? (séparez les sous-dossiers par " / ") :');
+      if (newPathStr !== null && newPathStr.trim() !== '') {
+        const newPathParts = newPathStr.split('/').map(p => p.trim()).filter(p => p);
+        if (newPathParts.length > 0) {
+          this.selectedSubjects.forEach(id => {
+            if (subjects[id]) subjects[id].pathParts = newPathParts;
+          });
+          StorageManager.saveSubjects(subjects);
+          this.selectedSubjects.clear();
+          this.isSelectMode = false;
+          this.renderSubjects();
+        }
+      }
+    });
+
+    // --- Custom Folder Creation ---
+    safeOn('btn-create-folder', 'click', () => {
+      const folderName = prompt('Nom du nouveau dossier :');
+      if (!folderName) return;
+      const folderIcon = prompt('Émoji / Icône pour ce dossier (ex: 📁, 📐) :', '📁') || '📁';
+      
+      const profile = StorageManager.getProfile();
+      if (!profile.customFolders) profile.customFolders = [];
+      profile.customFolders.push({
+        pathParts: [...this.currentFolderPath, folderName.trim()],
+        icon: folderIcon
+      });
+      StorageManager.saveProfile(profile);
+      this.renderSubjects();
+    });
 
     safeOn('header-cloud-btn', 'click', () => {
       const modal = document.getElementById('modal-cloud-login');
