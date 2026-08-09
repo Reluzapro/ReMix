@@ -3704,7 +3704,11 @@ function startApp() {
       });
 
       // Refresh views without re-running init (avoids duplicate listeners)
-      app.switchView('home-view');
+      app.switchView('subjects-view');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      const activeNav = document.querySelector('.nav-btn[data-target="subjects-view"]');
+      if (activeNav) activeNav.classList.add('active');
+      
       app.applyUserTheme();
       app.renderSubjects();
       app.renderShop();
