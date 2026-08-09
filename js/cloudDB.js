@@ -274,7 +274,7 @@ export async function fetchProfileFromCloud(username, hashedKey, includeSubjects
     if (includeSubjects) {
       query = query.select('*');
     } else {
-      query = query.select('id, username, hashed_key, profile_data, friend_id, srs_data, paused_session, updated_at');
+      query = query.select('id, username, hashed_key, profile_data, friend_id, srs_data, updated_at');
     }
 
     const { data, error } = await query.eq('id', session.user.id).maybeSingle();
