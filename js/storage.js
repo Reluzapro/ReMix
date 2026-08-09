@@ -345,8 +345,8 @@ export class StorageManager {
       return false; // Up to date, no need to download 1.6MB!
     }
 
-    // Pass false to exclude subjects_data (saves 300KB)
-    const cloudData = await fetchProfileFromCloud(username, hashedKey, false);
+    // Pass true to include subjects_data
+    const cloudData = await fetchProfileFromCloud(username, hashedKey, true);
     if (!cloudData) return false;
 
     // Update local sync timestamp
@@ -468,7 +468,7 @@ export class StorageManager {
       let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_éèêëàâäôöûüùîïçœæ-]/g, '');
 
       // Try Supabase Cloud first
-      const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
+      const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2', true);
       if (cloudData) {
         if (cloudData.username) {
           cleanUser = cloudData.username;
@@ -482,7 +482,15 @@ export class StorageManager {
 
           if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
         }
-        if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
+        if (cloudData.subjects_data) {
+          let localOptimized = {};
+          try {
+            const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+            if (str) localOptimized = JSON.parse(str);
+          } catch(e) {}
+          const mergedSubs = mergeSubjectsData(localOptimized, cloudData.subjects_data);
+          localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
+        }
         if (cloudData.paused_session) {
           localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
         } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
@@ -494,6 +502,8 @@ export class StorageManager {
           this.saveProfile(profile);
           saveFriendId(cleanUser, 'supabase_auth_v2', profile.friendId).catch(() => {});
         }
+        // Push merged state back to cloud immediately
+        await this.autoSyncCloud();
         return { success: true, isNew: false, profile };
       }
 
