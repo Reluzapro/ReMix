@@ -732,7 +732,8 @@ class AppController {
       });
     }
 
-    subfoldersMap.forEach(folder => {
+    const sortedFolders = Array.from(subfoldersMap.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    sortedFolders.forEach(folder => {
       const card = document.createElement('div');
       card.className = 'folder-card';
       const icon = folder.customIcon || (folder.name.toLowerCase().includes('anglais') ? '🇬🇧' : (folder.name.toLowerCase().includes('math') ? '📐' : '📁'));
@@ -872,7 +873,13 @@ class AppController {
       container.appendChild(card);
     });
 
-    directDecks.forEach(sub => {
+    const sortedDecks = [...directDecks].sort((a, b) => {
+      const aName = a.pathParts ? a.pathParts[a.pathParts.length - 1] : a.name;
+      const bName = b.pathParts ? b.pathParts[b.pathParts.length - 1] : b.name;
+      return aName.localeCompare(bName, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    sortedDecks.forEach(sub => {
       this.renderDeckCard(container, sub);
     });
 
