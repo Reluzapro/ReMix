@@ -763,7 +763,6 @@ class AppController {
             <button class="btn-secondary btn-share-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
             <button class="btn-secondary btn-edit-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Renommer le dossier">✏️</button>
             <button class="btn-secondary btn-delete-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce dossier">🗑️</button>
-            <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
           </div>
         </div>
       `;
