@@ -583,10 +583,16 @@
         <span style="font-size: 3.5rem;">📄</span>
         <h3 style="margin: 1rem 0 0.5rem 0; font-family: var(--font-title);">Glissez-déposez votre fichier de cours (.csv / .txt) ici</h3>
         <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Format : Question; Bonne Réponse; Mauvaise 1; Mauvaise 2; Mauvaise 3 (ou Question; Bonne Réponse)</p>
-        <label class="btn-primary" style="cursor: pointer;">
-          Sélectionner un Fichier
-          <input type="file" id="input-csv-file" accept=".csv,.txt" style="display: none;">
-        </label>
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+          <label class="btn-primary" style="cursor: pointer;">
+            Sélectionner Fichier(s)
+            <input type="file" id="input-csv-file" accept=".csv,.txt" multiple style="display: none;">
+          </label>
+          <label class="btn-secondary" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+            📁 Sélectionner un Dossier
+            <input type="file" id="input-csv-folder" accept=".csv,.txt" webkitdirectory directory multiple style="display: none;">
+          </label>
+        </div>
       </div>
 
       <div id="csv-result-box" style="display: none; margin-top: 2rem; background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-md);">

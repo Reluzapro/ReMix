@@ -470,7 +470,7 @@ export async function fetchPendingCommunitySubjects() {
     const db = getDB();
     if (!db) return [];
     const { data, error } = await db.from('community_subjects')
-      .select('*')
+      .select('id, subject_name, author, category, created_at, status')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -486,7 +486,7 @@ export async function fetchAcceptedCommunitySubjects() {
     const db = getDB();
     if (!db) return [];
     const { data, error } = await db.from('community_subjects')
-      .select('id, subject_name, author, category, created_at, questions_data')
+      .select('id, subject_name, author, category, created_at')
       .eq('status', 'accepted')
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -494,6 +494,22 @@ export async function fetchAcceptedCommunitySubjects() {
   } catch (e) {
     console.error('fetchAcceptedCommunitySubjects failed:', e.message);
     return [];
+  }
+}
+
+export async function fetchCommunitySubjectData(subjectId) {
+  try {
+    const db = getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('community_subjects')
+      .select('questions_data')
+      .eq('id', subjectId)
+      .single();
+    if (error) throw error;
+    return data ? data.questions_data : null;
+  } catch (e) {
+    console.error('fetchCommunitySubjectData failed:', e.message);
+    return null;
   }
 }
 

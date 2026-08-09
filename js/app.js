@@ -5,7 +5,7 @@ import { GamificationEngine, SHOP_ITEMS, ACHIEVEMENTS, EXCLUSIVE_EMOJIS } from '
 import { CSVParser } from './csvParser.js';
 import { SoundFX } from './audio.js';
 import { MultiplayerEngine } from './multiplayer.js';
-import { lookupByFriendId, addFriend, getFriends, removeFriend, sendFriendNotification, getMyNotifications, markNotificationRead, getDB, submitCommunitySubject, fetchPendingCommunitySubjects, fetchAcceptedCommunitySubjects, updateCommunitySubjectStatus, updateCommunitySubjectCategory, uploadRewardImage, getRewardImageUrl, deleteCommunitySubject } from './cloudDB.js';
+import { lookupByFriendId, addFriend, getFriends, removeFriend, sendFriendNotification, getMyNotifications, markNotificationRead, getDB, submitCommunitySubject, fetchPendingCommunitySubjects, fetchAcceptedCommunitySubjects, fetchCommunitySubjectData, updateCommunitySubjectStatus, updateCommunitySubjectCategory, uploadRewardImage, getRewardImageUrl, deleteCommunitySubject } from './cloudDB.js';
 
 const safeOn = (id, event, fn) => {
   const el = document.getElementById(id);
@@ -884,7 +884,9 @@ class AppController {
     const card = document.createElement('div');
     card.className = 'subject-card';
     const qCount = sub.questions ? sub.questions.length : 0;
-    const cleanName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+    let cleanName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+    // Remove [CSV] if present
+    cleanName = cleanName.replace(/\[CSV\]/g, '').trim();
 
     const dMastery = StorageManager.getDeckMastery(sub);
     if (dMastery.borderStyle) card.style.border = dMastery.borderStyle;
@@ -919,7 +921,9 @@ class AppController {
       </div>
       <div class="subject-footer">
         <span>${qCount} Cartes</span>
-        <div style="display: flex; gap: 0.4rem;">
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end;">
+          <button class="btn-secondary btn-icon-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Changer l'icône">🎨</button>
+          <button class="btn-secondary btn-rename-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Renommer">✏️</button>
           <button class="btn-secondary btn-organize-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Déplacer vers un dossier">⚙️ Organiser</button>
           <button class="btn-secondary btn-delete-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce paquet">🗑️</button>
           <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
@@ -943,13 +947,48 @@ class AppController {
 
     card.querySelector('.btn-delete-deck').addEventListener('click', (e) => {
       e.stopPropagation();
-      if (confirm(`Voulez-vous vraiment supprimer le paquet "${sub.name}" ?`)) {
+      if (confirm(`Voulez-vous vraiment supprimer le paquet "${cleanName}" ?`)) {
         const subjects = StorageManager.getSubjects();
         delete subjects[sub.id];
         StorageManager.saveSubjects(subjects);
         this.renderSubjects();
       }
     });
+
+    const btnRenameDeck = card.querySelector('.btn-rename-deck');
+    if (btnRenameDeck) {
+      btnRenameDeck.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newName = prompt('Nouveau nom pour ce paquet :', cleanName);
+        if (newName && newName.trim() !== '') {
+          const subjects = StorageManager.getSubjects();
+          if (subjects[sub.id]) {
+            if (subjects[sub.id].pathParts) {
+              subjects[sub.id].pathParts[subjects[sub.id].pathParts.length - 1] = newName.trim();
+            }
+            subjects[sub.id].name = newName.trim();
+            StorageManager.saveSubjects(subjects);
+            this.renderSubjects();
+          }
+        }
+      });
+    }
+
+    const btnIconDeck = card.querySelector('.btn-icon-deck');
+    if (btnIconDeck) {
+      btnIconDeck.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newIcon = prompt('Nouvelle icône pour ce paquet (ex: 📚, 🔬) :', sub.icon || '📚');
+        if (newIcon && newIcon.trim() !== '') {
+          const subjects = StorageManager.getSubjects();
+          if (subjects[sub.id]) {
+            subjects[sub.id].icon = newIcon.trim();
+            StorageManager.saveSubjects(subjects);
+            this.renderSubjects();
+          }
+        }
+      });
+    }
 
     card.querySelector('.btn-start-quiz').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2473,13 +2512,8 @@ class AppController {
       card.style.flexWrap = 'wrap';
       card.style.gap = '1rem';
 
-      const isFolder = sub.questions_data.is_folder === true;
-      const qPreview = isFolder 
-        ? `${sub.questions_data.subjects.length} cours inclus dans ce dossier.`
-        : sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
-      
-      const itemDesc = isFolder ? `${sub.questions_data.subjects.length} cours` : `${sub.questions_data.length} questions`;
-      const itemIcon = isFolder ? '📁' : '📄';
+      const itemDesc = `Taille non calculée (charger pour voir)`;
+      const itemIcon = '📦';
 
       let adminDeleteBtn = '';
       const profile = StorageManager.getProfile();
@@ -2490,9 +2524,9 @@ class AppController {
       card.innerHTML = `
         <div style="flex: 1;">
           <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${itemIcon} ${sub.subject_name}</div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${itemDesc} • ${sub.category}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${sub.category}</div>
           <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; border-left: 2px solid var(--accent-cyan); padding-left: 0.5rem;">
-            ${qPreview} ${isFolder ? '' : '...'}
+            Aperçu non disponible. Téléchargez le contenu pour y accéder.
           </div>
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -2502,9 +2536,21 @@ class AppController {
       `;
 
       const btn = card.querySelector('.btn-import-community');
-      btn.onclick = () => {
+      btn.onclick = async () => {
+        btn.textContent = '⏳ Chargement...';
+        btn.disabled = true;
+        const questionsData = await fetchCommunitySubjectData(sub.id);
+        
+        if (!questionsData) {
+            btn.textContent = '❌ Erreur';
+            alert('Impossible de télécharger le contenu du paquet.');
+            return;
+        }
+
+        const isFolder = questionsData.is_folder === true;
+
         if (isFolder) {
-          sub.questions_data.subjects.forEach((nestedSub, idx) => {
+          questionsData.subjects.forEach((nestedSub, idx) => {
             const newSubject = {
               ...nestedSub,
               id: `community_sub_${sub.id}_${idx}_${Date.now()}`,
@@ -2522,14 +2568,13 @@ class AppController {
             category: sub.category,
             description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
             verified: true,
-            questions: sub.questions_data
+            questions: questionsData
           };
           StorageManager.addSubject(newSubject);
         }
         
         btn.textContent = '✅ Importé !';
         btn.style.backgroundColor = 'var(--accent-green)';
-        btn.disabled = true;
       };
 
       const btnDelete = card.querySelector('.btn-delete-community');
@@ -2570,7 +2615,7 @@ class AppController {
         if (nestedSub.questions) {
           nestedSub.questions.forEach((q, qIdx) => {
             const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
-            const wrongAns = q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : '');
+            const wrongAns = q.options ? q.options.filter(opt => opt !== ans).join(', ') : (q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : ''));
             const explanation = q.explanation || q.feedback || '';
             
             html += `<div style="font-size: 0.85rem; margin-bottom: 0.75rem; border-left: 2px solid var(--accent-green); padding-left: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 6px;">`;
@@ -2592,7 +2637,7 @@ class AppController {
       content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Paquet : ${sub.subject_name} (${sub.questions_data.length} questions)</h3>`;
       sub.questions_data.forEach((q, qIdx) => {
         const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
-        const wrongAns = q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : '');
+        const wrongAns = q.options ? q.options.filter(opt => opt !== ans).join(', ') : (q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : ''));
         const explanation = q.explanation || q.feedback || '';
         
         let html = `<div style="font-size: 0.9rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">`;
@@ -2679,6 +2724,7 @@ class AppController {
   setupCSVImporter() {
     const dropZone = document.getElementById('drop-zone-csv');
     const fileInput = document.getElementById('input-csv-file');
+    const folderInput = document.getElementById('input-csv-folder');
 
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -2693,15 +2739,81 @@ class AppController {
       e.preventDefault();
       dropZone.style.borderColor = 'var(--border-color)';
       if (e.dataTransfer.files.length > 0) {
-        this.processCSVFile(e.dataTransfer.files[0]);
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+        if (files.length > 0) this.processCSVFiles(files);
       }
     });
 
     fileInput.addEventListener('change', () => {
       if (fileInput.files.length > 0) {
-        this.processCSVFile(fileInput.files[0]);
+        const files = Array.from(fileInput.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+        if (files.length > 0) this.processCSVFiles(files);
       }
     });
+
+    if (folderInput) {
+      folderInput.addEventListener('change', () => {
+        if (folderInput.files.length > 0) {
+          const files = Array.from(folderInput.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+          if (files.length > 0) this.processCSVFiles(files);
+        }
+      });
+    }
+  }
+
+  async processCSVFiles(files) {
+    const resultBox = document.getElementById('csv-result-box');
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = '<div style="color: var(--accent-cyan);">Importation en cours...</div>';
+
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const file of files) {
+      try {
+        const text = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsText(file, 'UTF-8');
+        });
+
+        const res = CSVParser.parse(text);
+        if (res.success) {
+          let name = file.name.replace(/\.[^/.]+$/, ""); // remove extension
+          name = name.replace(/\[CSV\]/g, '').trim(); // remove [CSV] flag
+
+          const newSubject = {
+            id: `sub_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+            name: name,
+            pathParts: [...this.currentFolderPath, name],
+            icon: '📄',
+            category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',
+            description: `Importé depuis ${file.name} (${res.questions.length} cartes)`,
+            verified: false,
+            questions: res.questions
+          };
+
+          StorageManager.addSubject(newSubject);
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(`Erreur d'importation pour ${file.name}:`, res.error);
+        }
+      } catch (err) {
+        errorCount++;
+        console.error(`Erreur de lecture pour ${file.name}:`, err);
+      }
+    }
+
+    this.renderCategoryFilters();
+    this.renderSubjects();
+
+    resultBox.innerHTML = `
+      <h4 style="color: var(--accent-green); margin-bottom: 0.5rem;">✅ Importation terminée</h4>
+      <p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${successCount}</strong> fichier(s) importé(s) avec succès.</p>
+      ${errorCount > 0 ? `<p style="color: var(--accent-red);">❌ <strong>${errorCount}</strong> fichier(s) ont échoué.</p>` : ''}
+    `;
   }
 
   processCSVFile(file) {
