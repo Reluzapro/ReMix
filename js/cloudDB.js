@@ -240,21 +240,22 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
       updated_at: Date.now()
     };
 
+    try {
+      const subjectsStr = JSON.stringify(subjectsData || {});
+      if (subjectsStr.length < 1024 * 1024 * 2) { 
+        payload.subjects_data = subjectsData;
+      }
+    } catch (e) {}
+
     // Update local timestamp to prevent our own push from triggering a pull
     try { localStorage.setItem('remix_last_cloud_sync', payload.updated_at.toString()); } catch(e){}
 
-    // Use UPDATE by default to avoid overwriting omitted columns (like subjects_data) to NULL
+    // Use UPDATE by default to avoid overwriting omitted columns
     const { data, error } = await db.from('profiles').update(payload).eq('id', session.user.id).select('id');
 
     // If row doesn't exist yet, fallback to INSERT
     if ((!error && (!data || data.length === 0)) || (error && error.code === 'PGRST116')) {
       payload.id = session.user.id;
-      try {
-        const subjectsStr = JSON.stringify(subjectsData || {});
-        if (subjectsStr.length < 1024 * 1024 * 2) { 
-          payload.subjects_data = subjectsData;
-        }
-      } catch (e) {}
       await db.from('profiles').insert(payload);
     }
   } catch (e) {
