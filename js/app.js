@@ -905,18 +905,14 @@ class AppController {
 
     card.querySelector('.btn-organize-deck').addEventListener('click', (e) => {
       e.stopPropagation();
-      const currentPath = (sub.pathParts || [sub.name]).join(' / ');
-      const newPathStr = prompt('Modifiez le chemin du dossier (séparez les dossiers par des barres obliques " / ") :', currentPath);
-      if (newPathStr !== null && newPathStr.trim() !== '') {
-        const newPathParts = newPathStr.split('/').map(p => p.trim()).filter(p => p);
-        if (newPathParts.length > 0) {
-          sub.pathParts = newPathParts;
-          const subjects = StorageManager.getSubjects();
-          subjects[sub.id] = sub;
-          StorageManager.saveSubjects(subjects);
-          this.renderSubjects();
-        }
-      }
+      const subjectName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+      this.openFolderSelector((newPathParts) => {
+        sub.pathParts = newPathParts;
+        const subjects = StorageManager.getSubjects();
+        subjects[sub.id] = sub;
+        StorageManager.saveSubjects(subjects);
+        this.renderSubjects();
+      }, subjectName);
     });
 
     container.appendChild(card);
@@ -2752,21 +2748,20 @@ class AppController {
 
     safeOn('btn-selection-move', 'click', () => {
       if (this.selectedSubjects.size === 0) return;
-      const subjects = StorageManager.getSubjects();
       
-      const newPathStr = prompt('Vers quel dossier voulez-vous déplacer la sélection ? (séparez les sous-dossiers par " / ") :');
-      if (newPathStr !== null && newPathStr.trim() !== '') {
-        const newPathParts = newPathStr.split('/').map(p => p.trim()).filter(p => p);
-        if (newPathParts.length > 0) {
-          this.selectedSubjects.forEach(id => {
-            if (subjects[id]) subjects[id].pathParts = newPathParts;
-          });
-          StorageManager.saveSubjects(subjects);
-          this.selectedSubjects.clear();
-          this.isSelectMode = false;
-          this.renderSubjects();
-        }
-      }
+      this.openFolderSelector((selectedPath) => {
+        const subjects = StorageManager.getSubjects();
+        this.selectedSubjects.forEach(id => {
+          if (subjects[id]) {
+            const subjectName = subjects[id].pathParts ? subjects[id].pathParts[subjects[id].pathParts.length - 1] : subjects[id].name;
+            subjects[id].pathParts = [...selectedPath, subjectName];
+          }
+        });
+        StorageManager.saveSubjects(subjects);
+        this.selectedSubjects.clear();
+        this.isSelectMode = false;
+        this.renderSubjects();
+      });
     });
 
     // --- Custom Folder Creation ---
@@ -3236,6 +3231,128 @@ class AppController {
       if (modal) modal.classList.remove('active');
       this.renderShop();
     });
+  }
+
+  buildFolderTree() {
+    const tree = { name: "Accueil", pathParts: [], children: {} };
+    const subjects = StorageManager.getSubjects();
+    const profile = StorageManager.getProfile();
+    
+    const addPathToTree = (pathParts) => {
+      let current = tree;
+      let currentPath = [];
+      for (const part of pathParts) {
+        currentPath.push(part);
+        if (!current.children[part]) {
+          current.children[part] = { name: part, pathParts: [...currentPath], children: {} };
+        }
+        current = current.children[part];
+      }
+    };
+
+    Object.values(subjects).forEach(sub => {
+      if (sub.pathParts && sub.pathParts.length > 1) {
+        addPathToTree(sub.pathParts.slice(0, -1));
+      }
+    });
+
+    if (profile.customFolders) {
+      profile.customFolders.forEach(cf => {
+        if (cf.pathParts) addPathToTree(cf.pathParts);
+      });
+    }
+
+    return tree;
+  }
+
+  openFolderSelector(callback, subjectName = null) {
+    const modal = document.getElementById('modal-folder-selector');
+    const treeContainer = document.getElementById('folder-selector-tree');
+    
+    let selectedPath = [];
+    const tree = this.buildFolderTree();
+
+    const renderNode = (node, depth = 0) => {
+      const el = document.createElement('div');
+      el.style.paddingLeft = `${depth * 1.5}rem`;
+      el.style.paddingTop = '0.5rem';
+      el.style.paddingBottom = '0.5rem';
+      el.style.cursor = 'pointer';
+      el.style.borderRadius = '4px';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.gap = '0.5rem';
+
+      const isSelected = JSON.stringify(node.pathParts) === JSON.stringify(selectedPath);
+      if (isSelected) {
+        el.style.backgroundColor = 'rgba(74, 222, 128, 0.2)';
+        el.style.border = '1px solid var(--accent-green)';
+      } else {
+        el.style.border = '1px solid transparent';
+      }
+
+      const icon = depth === 0 ? '🏠' : '📁';
+      el.innerHTML = `<span>${icon}</span><span>${node.name}</span>`;
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedPath = node.pathParts;
+        renderTree();
+      });
+
+      return el;
+    };
+
+    const renderTreeRecursive = (node, depth, container) => {
+      container.appendChild(renderNode(node, depth));
+      Object.values(node.children).forEach(child => {
+        renderTreeRecursive(child, depth + 1, container);
+      });
+    };
+
+    const renderTree = () => {
+      treeContainer.innerHTML = '';
+      renderTreeRecursive(tree, 0, treeContainer);
+    };
+
+    renderTree();
+
+    const handleConfirm = () => {
+      let finalPath = [...selectedPath];
+      if (subjectName) finalPath.push(subjectName);
+      callback(finalPath);
+      modal.classList.remove('active');
+    };
+
+    const handleNew = () => {
+      const folderName = prompt('Nom du nouveau sous-dossier dans ' + (selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : 'Accueil') + ' :');
+      if (folderName && folderName.trim() !== '') {
+        selectedPath.push(folderName.trim());
+        const profile = StorageManager.getProfile();
+        if (!profile.customFolders) profile.customFolders = [];
+        profile.customFolders.push({ pathParts: [...selectedPath], customIcon: '📁' });
+        StorageManager.saveProfile(profile);
+        
+        const newTree = this.buildFolderTree();
+        Object.assign(tree, newTree);
+        renderTree();
+      }
+    };
+
+    // Fix event listeners
+    const btnConfirmOld = document.getElementById('btn-folder-selector-confirm');
+    const btnNewOld = document.getElementById('btn-folder-selector-new');
+    
+    const btnConfirm = btnConfirmOld.cloneNode(true);
+    const btnNew = btnNewOld.cloneNode(true);
+    
+    btnConfirmOld.parentNode.replaceChild(btnConfirm, btnConfirmOld);
+    btnNewOld.parentNode.replaceChild(btnNew, btnNewOld);
+
+    btnConfirm.addEventListener('click', handleConfirm);
+    btnNew.addEventListener('click', handleNew);
+
+    modal.classList.add('active');
   }
 }
 
