@@ -2570,7 +2570,19 @@ class AppController {
         if (nestedSub.questions) {
           nestedSub.questions.forEach((q, qIdx) => {
             const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
-            html += `<div style="font-size: 0.85rem; margin-bottom: 0.25rem; border-left: 2px solid var(--accent-green); padding-left: 0.5rem;"><span style="color: var(--text-secondary);">Q${qIdx+1}:</span> ${q.question} <br> <span style="color: var(--text-secondary);">R:</span> <span style="color: var(--accent-green);">${ans}</span></div>`;
+            const wrongAns = q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : '');
+            const explanation = q.explanation || q.feedback || '';
+            
+            html += `<div style="font-size: 0.85rem; margin-bottom: 0.75rem; border-left: 2px solid var(--accent-green); padding-left: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 6px;">`;
+            html += `<div style="margin-bottom: 0.25rem;"><span style="color: var(--text-secondary);">Q${qIdx+1}:</span> ${q.question}</div>`;
+            html += `<div><span style="color: var(--text-secondary);">Vrai:</span> <span style="color: var(--accent-green);">${ans}</span></div>`;
+            if (wrongAns) {
+              html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem; margin-top: 0.2rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+            }
+            if (explanation) {
+              html += `<div style="color: var(--accent-blue); font-size: 0.8rem; margin-top: 0.2rem;"><strong>Explication:</strong> ${explanation}</div>`;
+            }
+            html += `</div>`;
           });
         }
         html += `</div>`;
@@ -2581,11 +2593,16 @@ class AppController {
       sub.questions_data.forEach((q, qIdx) => {
         const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
         const wrongAns = q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : '');
+        const explanation = q.explanation || q.feedback || '';
+        
         let html = `<div style="font-size: 0.9rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">`;
         html += `<div style="margin-bottom: 0.25rem;"><strong>Q${qIdx+1}:</strong> ${q.question}</div>`;
         html += `<div style="color: var(--accent-green);"><strong>Vrai:</strong> ${ans}</div>`;
         if (wrongAns) {
-          html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+          html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem; margin-top: 0.2rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+        }
+        if (explanation) {
+          html += `<div style="color: var(--accent-blue); font-size: 0.85rem; margin-top: 0.3rem;"><strong>Explication:</strong> ${explanation}</div>`;
         }
         html += `</div>`;
         content.innerHTML += html;
