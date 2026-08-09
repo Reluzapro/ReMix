@@ -2683,15 +2683,17 @@ class AppController {
       card.style.borderRadius = 'var(--radius-md)';
       card.style.marginBottom = '1rem';
 
-      const isFolder = sub.questions_data.is_folder === true;
+      const questionsData = sub.questions_data || [];
+      const isFolder = questionsData && questionsData.is_folder === true;
+      const qCount = isFolder ? (questionsData.subjects?.length || 0) : (Array.isArray(questionsData) ? questionsData.length : 0);
       const qPreview = isFolder 
-        ? `${sub.questions_data.subjects.length} cours inclus.`
-        : sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+        ? `${qCount} cours inclus.`
+        : (Array.isArray(questionsData) ? questionsData.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>') : 'N/A');
 
       card.innerHTML = `
         <div style="margin-bottom: 1rem;">
           <div style="font-size: 1.1rem; font-weight: 700; color: white;">${sub.subject_name} <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-secondary);">par ${sub.author}</span></div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${sub.questions_data.length} questions</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${qCount} questions</div>
           <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-family: monospace; color: var(--accent-cyan); margin-bottom: 1rem; max-height: 100px; overflow-y: auto;">
             ${qPreview} ...
           </div>
