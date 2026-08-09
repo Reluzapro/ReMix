@@ -336,8 +336,10 @@ export class StorageManager {
     const { username, hashedKey } = profile.cloudAccount;
 
     // Lightweight heartbeat check: only download profile if newer than our last sync
-    const cloudTimestamp = await checkCloudUpdateTimestamp();
-    const localTimestamp = parseInt(localStorage.getItem('remix_last_cloud_sync') || '0');
+    // Parse timestamps properly as dates
+    const cloudTimestamp = new Date(await checkCloudUpdateTimestamp()).getTime() || 0;
+    const localTimestampStr = localStorage.getItem('remix_last_cloud_sync');
+    const localTimestamp = localTimestampStr ? new Date(localTimestampStr).getTime() : 0;
     
     if (cloudTimestamp <= localTimestamp && cloudTimestamp !== 0) {
       return false; // Up to date, no need to download 1.6MB!
@@ -355,6 +357,8 @@ export class StorageManager {
     if (cloudData.profile_data) {
       const currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
       const mergedProf = mergeProfileData(currentProfile, cloudData.profile_data);
+      // Ensure we re-compute anti-cheat token so we don't accidentally ban the user
+      mergedProf.checksumToken = computeAntiCheatToken(mergedProf);
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProf));
     }
     if (cloudData.srs_data) {
