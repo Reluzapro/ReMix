@@ -761,6 +761,7 @@ class AppController {
           <span>${folder.questionCount} cartes au total</span>
           <div style="display: flex; gap: 0.4rem;">
             <button class="btn-secondary btn-share-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
+            <button class="btn-secondary btn-edit-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Renommer le dossier">✏️</button>
             <button class="btn-secondary btn-delete-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce dossier">🗑️</button>
             <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
           </div>
@@ -770,6 +771,58 @@ class AppController {
       card.querySelector('.btn-share-folder').addEventListener('click', (e) => {
         e.stopPropagation();
         this.shareFolderToCommunity(folder.name, folder.decks);
+      });
+
+      card.querySelector('.btn-edit-folder').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newName = prompt('Nouveau nom pour ce dossier :', folder.name);
+        if (!newName || newName.trim() === '') return;
+        const newIcon = prompt('Nouvelle icône pour ce dossier :', icon) || icon;
+        
+        const profile = StorageManager.getProfile();
+        let folderFoundInProfile = false;
+        if (profile.customFolders) {
+          profile.customFolders.forEach(cf => {
+            if (cf.pathParts.length === this.currentFolderPath.length + 1 &&
+                cf.pathParts[cf.pathParts.length - 1] === folder.name) {
+              let match = true;
+              for (let i = 0; i < this.currentFolderPath.length; i++) {
+                if (cf.pathParts[i] !== this.currentFolderPath[i]) match = false;
+              }
+              if (match) {
+                cf.pathParts[cf.pathParts.length - 1] = newName.trim();
+                cf.customIcon = newIcon;
+                folderFoundInProfile = true;
+              }
+            }
+          });
+        }
+        
+        if (!folderFoundInProfile) {
+          if (!profile.customFolders) profile.customFolders = [];
+          profile.customFolders.push({
+            pathParts: [...this.currentFolderPath, newName.trim()],
+            customIcon: newIcon
+          });
+        }
+        StorageManager.saveProfile(profile);
+
+        const subjects = StorageManager.getSubjects();
+        let subjectsModified = false;
+        folder.decks.forEach(sub => {
+          if (subjects[sub.id] && subjects[sub.id].pathParts) {
+            const depth = this.currentFolderPath.length;
+            if (subjects[sub.id].pathParts[depth] === folder.name) {
+              subjects[sub.id].pathParts[depth] = newName.trim();
+              subjectsModified = true;
+            }
+          }
+        });
+        
+        if (subjectsModified) {
+          StorageManager.saveSubjects(subjects);
+        }
+        this.renderSubjects();
       });
 
       card.querySelector('.btn-delete-folder').addEventListener('click', (e) => {
@@ -2653,7 +2706,7 @@ class AppController {
           name: subjectName,
           pathParts: [subjectName],
           icon: res.isAnkiDeck ? '🎴' : '📑',
-          category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours CSV',
+          category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',
           description: res.isAnkiDeck
             ? `Importé depuis Anki (${res.count} cartes avec fausses réponses auto-générées).`
             : `Cours importé avec ${res.count} questions.`,
@@ -2677,7 +2730,7 @@ class AppController {
             btnSubmit.textContent = 'Envoi en cours...';
             const profile = StorageManager.getProfile();
             const author = profile.cloudAccount?.username || 'Anonyme';
-            const category = res.isAnkiDeck ? 'Anki' : 'CSV';
+            const category = res.isAnkiDeck ? 'Anki' : 'Mes Cours';
             const success = await submitCommunitySubject(subjectName, author, category, newSubject.questions);
             if (success) {
               btnSubmit.style.backgroundColor = 'var(--accent-green)';
