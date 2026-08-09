@@ -2609,13 +2609,22 @@ class AppController {
     const modal = document.getElementById('modal-admin-qcm-preview');
     const content = document.getElementById('admin-qcm-preview-content');
     
+    if (!sub || !sub.questions_data) {
+      content.innerHTML = '<div style="color: var(--accent-red);">Erreur : données de questions manquantes.</div>';
+      modal.classList.add('active');
+      return;
+    }
+    
     content.innerHTML = '';
     
-    const isFolder = sub.questions_data.is_folder === true;
+    const questionsData = sub.questions_data || [];
+    const isFolder = questionsData && questionsData.is_folder === true;
     
     if (isFolder) {
-      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Dossier : ${sub.subject_name} (${sub.questions_data.subjects.length} cours)</h3>`;
-      sub.questions_data.subjects.forEach((nestedSub, idx) => {
+      const subjectsCount = questionsData.subjects?.length || 0;
+      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Dossier : ${sub.subject_name} (${subjectsCount} cours)</h3>`;
+      const subjects = questionsData.subjects || [];
+      subjects.forEach((nestedSub, idx) => {
         let html = `<div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1rem;">`;
         html += `<h4 style="margin-bottom: 0.5rem; color: white;">Cours ${idx + 1} : ${nestedSub.name}</h4>`;
         if (nestedSub.questions) {
@@ -2640,24 +2649,27 @@ class AppController {
         content.innerHTML += html;
       });
     } else {
-      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Paquet : ${sub.subject_name} (${sub.questions_data.length} questions)</h3>`;
-      sub.questions_data.forEach((q, qIdx) => {
-        const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
-        const wrongAns = q.options ? q.options.filter(opt => opt !== ans).join(', ') : (q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : ''));
-        const explanation = q.explanation || q.feedback || '';
-        
-        let html = `<div style="font-size: 0.9rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">`;
-        html += `<div style="margin-bottom: 0.25rem;"><strong>Q${qIdx+1}:</strong> ${q.question}</div>`;
-        html += `<div style="color: var(--accent-green);"><strong>Vrai:</strong> ${ans}</div>`;
-        if (wrongAns) {
-          html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem; margin-top: 0.2rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
-        }
-        if (explanation) {
-          html += `<div style="color: var(--accent-blue); font-size: 0.85rem; margin-top: 0.3rem;"><strong>Explication:</strong> ${explanation}</div>`;
-        }
-        html += `</div>`;
-        content.innerHTML += html;
-      });
+      const questionsCount = Array.isArray(questionsData) ? questionsData.length : 0;
+      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Paquet : ${sub.subject_name} (${questionsCount} questions)</h3>`;
+      if (Array.isArray(questionsData)) {
+        questionsData.forEach((q, qIdx) => {
+          const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
+          const wrongAns = q.options ? q.options.filter(opt => opt !== ans).join(', ') : (q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : ''));
+          const explanation = q.explanation || q.feedback || '';
+          
+          let html = `<div style="font-size: 0.9rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">`;
+          html += `<div style="margin-bottom: 0.25rem;"><strong>Q${qIdx+1}:</strong> ${q.question}</div>`;
+          html += `<div style="color: var(--accent-green);"><strong>Vrai:</strong> ${ans}</div>`;
+          if (wrongAns) {
+            html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem; margin-top: 0.2rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+          }
+          if (explanation) {
+            html += `<div style="color: var(--accent-blue); font-size: 0.85rem; margin-top: 0.3rem;"><strong>Explication:</strong> ${explanation}</div>`;
+          }
+          html += `</div>`;
+          content.innerHTML += html;
+        });
+      }
     }
 
     modal.classList.add('active');
