@@ -908,7 +908,7 @@ class AppController {
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.25rem;">
               <div style="display: flex; gap: 0.5rem; align-items: center; overflow: hidden;">
                 ${checkboxHTML}
-                <h3 class="subject-title" style="font-size: 1.1rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${cleanName}</h3>
+                <h3 class="subject-title" style="font-size: 1.1rem; word-break: break-word;">${cleanName}</h3>
               </div>
               <span class="level-badge" style="background: rgba(0,0,0,0.4); border: 1px solid ${dMastery.colorHex}; color: ${dMastery.colorHex}; font-size: 0.75rem; white-space: nowrap;">${dMastery.statusText}</span>
             </div>

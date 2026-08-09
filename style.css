@@ -385,6 +385,7 @@ main.main-content {
   font-weight: 700;
   margin-bottom: 0.5rem;
   color: #fff;
+  word-break: break-word;
 }
 
 .folder-meta {
@@ -453,6 +454,7 @@ main.main-content {
   font-family: var(--font-title);
   font-size: 1.25rem;
   font-weight: 700;
+  word-break: break-word;
 }
 
 .subject-desc {
