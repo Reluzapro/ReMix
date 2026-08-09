@@ -22,7 +22,8 @@ export class CSVParser {
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if ((char === '\t' || char === ';') && !inQuotes) {
-        currentRecord.append ? currentRecord.push(currentField.trim()) : (currentRecord = [currentField.trim()]);
+        // add the current field to the current record
+        currentRecord.push(currentField.trim());
         currentField = '';
       } else if (char === '\n' && !inQuotes) {
         currentRecord.push(currentField.trim());
