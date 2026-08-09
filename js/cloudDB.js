@@ -471,11 +471,16 @@ export async function fetchPendingCommunitySubjects() {
     const db = getDB();
     if (!db) return [];
     const { data, error } = await db.from('community_subjects')
-      .select('id, subject_name, author, category, created_at, status')
+      .select('id, subject_name, author, category, created_at, status, questions_data')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    
+    // Parse questions_data if it's a JSON string
+    return (data || []).map(row => ({
+      ...row,
+      questions_data: typeof row.questions_data === 'string' ? JSON.parse(row.questions_data) : row.questions_data
+    }));
   } catch (e) {
     console.error('fetchPendingCommunitySubjects failed:', e.message);
     return [];
@@ -487,11 +492,16 @@ export async function fetchAcceptedCommunitySubjects() {
     const db = getDB();
     if (!db) return [];
     const { data, error } = await db.from('community_subjects')
-      .select('id, subject_name, author, category, created_at')
+      .select('id, subject_name, author, category, created_at, questions_data')
       .eq('status', 'accepted')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    
+    // Parse questions_data if it's a JSON string
+    return (data || []).map(row => ({
+      ...row,
+      questions_data: typeof row.questions_data === 'string' ? JSON.parse(row.questions_data) : row.questions_data
+    }));
   } catch (e) {
     console.error('fetchAcceptedCommunitySubjects failed:', e.message);
     return [];
@@ -507,7 +517,11 @@ export async function fetchCommunitySubjectData(subjectId) {
       .eq('id', subjectId)
       .single();
     if (error) throw error;
-    return data ? data.questions_data : null;
+    if (!data) return null;
+    
+    // Parse questions_data if it's a JSON string
+    const questionsData = data.questions_data;
+    return typeof questionsData === 'string' ? JSON.parse(questionsData) : questionsData;
   } catch (e) {
     console.error('fetchCommunitySubjectData failed:', e.message);
     return null;
