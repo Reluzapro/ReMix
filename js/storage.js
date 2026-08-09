@@ -117,15 +117,46 @@ export class StorageManager {
   static getSubjects() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
-      if (!data) { this.saveSubjects(DEFAULT_SUBJECTS); return DEFAULT_SUBJECTS; }
+      if (!data) { return { ...DEFAULT_SUBJECTS }; }
+      
       const custom = JSON.parse(data);
-      return { ...DEFAULT_SUBJECTS, ...custom };
-    } catch (e) { return DEFAULT_SUBJECTS; }
+      const reconstructed = { ...DEFAULT_SUBJECTS };
+      
+      Object.keys(custom).forEach(id => {
+        if (DEFAULT_SUBJECTS[id]) {
+          if (custom[id].deleted) {
+            delete reconstructed[id];
+          } else {
+            reconstructed[id] = { ...DEFAULT_SUBJECTS[id], ...custom[id], qcm: DEFAULT_SUBJECTS[id].qcm };
+          }
+        } else {
+          reconstructed[id] = custom[id];
+        }
+      });
+      return reconstructed;
+    } catch (e) { return { ...DEFAULT_SUBJECTS }; }
   }
 
   static saveSubjects(subjects) {
     try {
-      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+      const optimizedSubjects = {};
+      Object.keys(subjects).forEach(id => {
+        if (DEFAULT_SUBJECTS[id]) {
+          const optimized = { ...subjects[id] };
+          delete optimized.qcm;
+          optimizedSubjects[id] = optimized;
+        } else {
+          optimizedSubjects[id] = subjects[id];
+        }
+      });
+      
+      Object.keys(DEFAULT_SUBJECTS).forEach(id => {
+        if (!subjects[id]) {
+          optimizedSubjects[id] = { id: id, deleted: true };
+        }
+      });
+
+      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(optimizedSubjects));
       this.autoSyncCloud();
       this.notify();
     } catch (e) {}
@@ -140,7 +171,10 @@ export class StorageManager {
 
   static removeSubject(subjectId) {
     const subjects = this.getSubjects();
-    if (subjects[subjectId]) { delete subjects[subjectId]; this.saveSubjects(subjects); }
+    if (subjects[subjectId]) { 
+      delete subjects[subjectId];
+      this.saveSubjects(subjects); 
+    }
     return subjects;
   }
 
@@ -328,8 +362,12 @@ export class StorageManager {
       if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
     }
     if (cloudData.subjects_data) {
-      const currentSubjects = this.getSubjects();
-      const mergedSubs = mergeSubjectsData(currentSubjects, cloudData.subjects_data);
+      let localOptimized = {};
+      try {
+        const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+        if (str) localOptimized = JSON.parse(str);
+      } catch(e) {}
+      const mergedSubs = mergeSubjectsData(localOptimized, cloudData.subjects_data);
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
     }
     if (cloudData.paused_session) {
@@ -345,24 +383,31 @@ export class StorageManager {
     const profile = this.getProfile();
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return;
     const { username, hashedKey } = profile.cloudAccount;
-    // Also update localStorage cloud key for offline fallback
+    
+    // Read optimized subjects directly from localStorage to push a lightweight payload
+    let optimizedSubjectsToPush = {};
+    try {
+      const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+      if (str) optimizedSubjectsToPush = JSON.parse(str);
+    } catch(e) {}
+
     const cloudKey = `remix_cloud_db_${username}_${hashedKey}`;
     const payload = {
       profile,
       srs: this.getSRSData(),
-      subjects: this.getSubjects(),
+      subjects: optimizedSubjectsToPush,
       pausedSession: this.getPausedSession(),
       revisionItems: this.getRevisionItems(),
       updatedAt: Date.now()
     };
     try { localStorage.setItem(cloudKey, JSON.stringify(payload)); } catch (e) {}
-    // Sync to Supabase
+    
     pushProfileToCloud(
       username,
       hashedKey,
       profile,
       this.getSRSData(),
-      this.getSubjects(),
+      optimizedSubjectsToPush,
       this.getPausedSession(),
       this.getRevisionItems()
     ).catch(() => {});
