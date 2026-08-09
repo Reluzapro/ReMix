@@ -237,7 +237,7 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
         revisionItems: revisionItems,
         pausedSession: pausedSession
       },
-      updated_at: new Date().toISOString()
+      updated_at: Date.now()
     };
 
     try {

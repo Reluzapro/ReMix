@@ -335,11 +335,10 @@ export class StorageManager {
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return false;
     const { username, hashedKey } = profile.cloudAccount;
 
-    // Lightweight heartbeat check: only download profile if newer than our last sync
-    // Parse timestamps properly as dates
-    const cloudTimestamp = new Date(await checkCloudUpdateTimestamp()).getTime() || 0;
+    // Parse timestamps as numbers (Epoch time in ms)
+    const cloudTimestamp = Number(await checkCloudUpdateTimestamp()) || 0;
     const localTimestampStr = localStorage.getItem('remix_last_cloud_sync');
-    const localTimestamp = localTimestampStr ? new Date(localTimestampStr).getTime() : 0;
+    const localTimestamp = localTimestampStr ? Number(localTimestampStr) : 0;
     
     if (cloudTimestamp <= localTimestamp && cloudTimestamp !== 0) {
       return false; // Up to date, no need to download 1.6MB!
