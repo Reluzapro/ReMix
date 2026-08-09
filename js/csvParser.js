@@ -133,8 +133,13 @@ export class CSVParser {
           });
         } else {
           let opts = [];
+          let explanation = `Réponse : ${aClean}`;
           if (r.length >= 5 && !isAnkiDeck) {
             opts = [aClean, this.cleanHTML(r[2]), this.cleanHTML(r[3]), this.cleanHTML(r[4])];
+            if (r.length >= 6) {
+              const explicitExpl = this.cleanHTML(r[5]);
+              if (explicitExpl) explanation = explicitExpl;
+            }
           } else {
             allAnswers.push(aClean);
             opts = [aClean]; // Will generate distractors below
@@ -145,7 +150,7 @@ export class CSVParser {
             question: qClean,
             correct: aClean,
             options: opts,
-            explanation: `Réponse : ${aClean}`
+            explanation: explanation
           });
         }
       }
