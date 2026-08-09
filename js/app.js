@@ -2783,10 +2783,18 @@ class AppController {
           let name = file.name.replace(/\.[^/.]+$/, ""); // remove extension
           name = name.replace(/\[CSV\]/g, '').trim(); // remove [CSV] flag
 
+          let relativeFolders = [];
+          if (file.webkitRelativePath) {
+            const parts = file.webkitRelativePath.split('/');
+            if (parts.length > 1) {
+              relativeFolders = parts.slice(0, parts.length - 1);
+            }
+          }
+
           const newSubject = {
             id: `sub_${Date.now()}_${Math.floor(Math.random()*1000)}`,
             name: name,
-            pathParts: [...this.currentFolderPath, name],
+            pathParts: [...this.currentFolderPath, ...relativeFolders, name],
             icon: '📄',
             category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',
             description: `Importé depuis ${file.name} (${res.questions.length} cartes)`,
