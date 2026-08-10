@@ -987,8 +987,15 @@ main.main-content {
   }
 
   .nav-btn {
-    font-size: 0.65rem;
-    padding: 0.35rem 0.1rem;
+    padding: 0.5rem 0.1rem;
+  }
+
+  .nav-btn span {
+    font-size: 1.4rem;
+  }
+
+  .nav-text-short {
+    display: none !important;
   }
 
   .question-title {
