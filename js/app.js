@@ -1190,6 +1190,10 @@ class AppController {
     } else {
       // Find badge icons from ACHIEVEMENTS in gamification.js or just display text
       badges.forEach(bId => {
+        const ach = ACHIEVEMENTS.find(a => a.id === bId);
+        const icon = ach ? ach.icon : '🏅';
+        const title = ach ? ach.title : bId.split('_').pop();
+
         const badgeEl = document.createElement('div');
         badgeEl.style.padding = '0.3rem 0.6rem';
         badgeEl.style.background = 'rgba(255,255,255,0.1)';
@@ -1199,13 +1203,7 @@ class AppController {
         badgeEl.style.alignItems = 'center';
         badgeEl.style.gap = '0.3rem';
         
-        let icon = '🏅';
-        if (bId.includes('perfect')) icon = '🌟';
-        if (bId.includes('streak')) icon = '🔥';
-        if (bId.includes('level')) icon = '👑';
-        if (bId.includes('coins')) icon = '💰';
-        
-        badgeEl.innerHTML = `<span>${icon}</span> <span>${bId.split('_').pop()}</span>`;
+        badgeEl.innerHTML = `<span>${icon}</span> <span>${title}</span>`;
         badgesContainer.appendChild(badgeEl);
       });
     }

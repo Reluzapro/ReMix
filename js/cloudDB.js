@@ -377,7 +377,7 @@ export async function getFriends(myUsername) {
         wins: pd.stats?.duelWins || 0,
         total_duels: pd.stats?.duelsPlayed || 0,
         streak: pd.streakDays || 0,
-        badges: pd.unlockedAchievements || []
+        badges: pd.selectedBadges || (pd.unlockedAchievements ? pd.unlockedAchievements.slice(0, 3) : [])
       };
     });
   } catch (e) {

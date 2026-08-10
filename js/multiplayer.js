@@ -356,6 +356,9 @@ export class MultiplayerEngine {
       xp: profile.xp || 0,
       coins: profile.coins || 0,
       wins: profile.stats?.duelWins || 0,
+      total_duels: profile.stats?.duelsPlayed || 0,
+      streak: profile.streakDays || 0,
+      badges: profile.selectedBadges || (profile.unlockedAchievements ? profile.unlockedAchievements.slice(0, 3) : []),
       avatar: profile.avatar || '🎓',
       isUser: true,
       isVerified
@@ -366,7 +369,8 @@ export class MultiplayerEngine {
     if (!cloudPlayers || cloudPlayers.length === 0) {
       cloudPlayers = StorageManager.getGlobalLeaderboardRegistry().map(p => ({
         name: p.name, level: p.level, xp: p.xp || 0, coins: p.coins, wins: p.wins,
-        avatar: p.avatar, checksum_token: p.checksumToken
+        avatar: p.avatar, checksum_token: p.checksumToken,
+        total_duels: p.total_duels || 0, streak: p.streak || 0, badges: p.badges || []
       }));
     }
 
@@ -384,6 +388,9 @@ export class MultiplayerEngine {
         xp: player.xp || 0,
         coins: player.coins,
         wins: player.wins,
+        total_duels: player.total_duels || 0,
+        streak: player.streak || 0,
+        badges: player.badges || [],
         avatar: player.avatar,
         isUser: isMe,
         isVerified: true

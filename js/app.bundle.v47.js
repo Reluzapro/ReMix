@@ -386,7 +386,7 @@ async function getFriends(myUsername) {
         wins: pd.stats?.duelWins || 0,
         total_duels: pd.stats?.duelsPlayed || 0,
         streak: pd.streakDays || 0,
-        badges: pd.unlockedAchievements || []
+        badges: pd.selectedBadges || (pd.unlockedAchievements ? pd.unlockedAchievements.slice(0, 3) : [])
       };
     });
   } catch (e) {
@@ -2757,6 +2757,9 @@ class MultiplayerEngine {
       xp: profile.xp || 0,
       coins: profile.coins || 0,
       wins: profile.stats?.duelWins || 0,
+      total_duels: profile.stats?.duelsPlayed || 0,
+      streak: profile.streakDays || 0,
+      badges: profile.selectedBadges || (profile.unlockedAchievements ? profile.unlockedAchievements.slice(0, 3) : []),
       avatar: profile.avatar || '🎓',
       isUser: true,
       isVerified
@@ -2767,7 +2770,8 @@ class MultiplayerEngine {
     if (!cloudPlayers || cloudPlayers.length === 0) {
       cloudPlayers = StorageManager.getGlobalLeaderboardRegistry().map(p => ({
         name: p.name, level: p.level, xp: p.xp || 0, coins: p.coins, wins: p.wins,
-        avatar: p.avatar, checksum_token: p.checksumToken
+        avatar: p.avatar, checksum_token: p.checksumToken,
+        total_duels: p.total_duels || 0, streak: p.streak || 0, badges: p.badges || []
       }));
     }
 
@@ -2785,6 +2789,9 @@ class MultiplayerEngine {
         xp: player.xp || 0,
         coins: player.coins,
         wins: player.wins,
+        total_duels: player.total_duels || 0,
+        streak: player.streak || 0,
+        badges: player.badges || [],
         avatar: player.avatar,
         isUser: isMe,
         isVerified: true
@@ -3996,6 +4003,10 @@ class AppController {
     } else {
       // Find badge icons from ACHIEVEMENTS in gamification.js or just display text
       badges.forEach(bId => {
+        const ach = ACHIEVEMENTS.find(a => a.id === bId);
+        const icon = ach ? ach.icon : '🏅';
+        const title = ach ? ach.title : bId.split('_').pop();
+
         const badgeEl = document.createElement('div');
         badgeEl.style.padding = '0.3rem 0.6rem';
         badgeEl.style.background = 'rgba(255,255,255,0.1)';
@@ -4005,13 +4016,7 @@ class AppController {
         badgeEl.style.alignItems = 'center';
         badgeEl.style.gap = '0.3rem';
         
-        let icon = '🏅';
-        if (bId.includes('perfect')) icon = '🌟';
-        if (bId.includes('streak')) icon = '🔥';
-        if (bId.includes('level')) icon = '👑';
-        if (bId.includes('coins')) icon = '💰';
-        
-        badgeEl.innerHTML = `<span>${icon}</span> <span>${bId.split('_').pop()}</span>`;
+        badgeEl.innerHTML = `<span>${icon}</span> <span>${title}</span>`;
         badgesContainer.appendChild(badgeEl);
       });
     }
