@@ -2889,6 +2889,7 @@ class AppController {
     this.setupEventListeners();
 
     this.setupFriendSystem();
+    this.checkAndVerifyLocalDecks();
 
     // Periodic 5-minute silent background cloud sync heartbeat (heavy profile sync)
     setInterval(async () => {
@@ -5390,6 +5391,7 @@ class AppController {
     container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Chargement des paquets...</div>';
     
     const subjects = await fetchAcceptedCommunitySubjects();
+    this.checkAndVerifyLocalDecks(subjects);
     if (subjects.length === 0) {
       container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Aucun paquet communautaire disponible pour le moment.</div>';
       return;
@@ -6462,6 +6464,38 @@ class AppController {
     btnNew.addEventListener('click', handleNew);
 
     modal.classList.add('active');
+  }
+
+  async checkAndVerifyLocalDecks(accepted) {
+    try {
+      if (!accepted) {
+        accepted = await fetchAcceptedCommunitySubjects();
+      }
+      if (!accepted || accepted.length === 0) return;
+
+      const subjects = StorageManager.getSubjects();
+      let modified = false;
+
+      Object.values(subjects).forEach(sub => {
+        if (sub.verified === false) {
+          const cleanName = (sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name).replace(/\[CSV\]/g, '').trim().toLowerCase();
+          
+          const match = accepted.find(ac => ac.subject_name.toLowerCase() === cleanName);
+          if (match) {
+            sub.verified = true;
+            modified = true;
+            console.log(`Local deck "${sub.name}" has been recognized a posteriori by the community and is now verified!`);
+          }
+        }
+      });
+
+      if (modified) {
+        StorageManager.saveSubjects(subjects);
+        this.renderSubjects();
+      }
+    } catch (e) {
+      console.log('checkAndVerifyLocalDecks failed:', e.message);
+    }
   }
 }
 
