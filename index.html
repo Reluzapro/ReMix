@@ -69,28 +69,44 @@
   <!-- Navigation Tabs -->
   <nav class="app-nav">
     <button class="nav-btn active" data-target="subjects-view">
-      <span>📚</span> Cours & Quiz
+      <span>📚</span>
+      <span class="nav-text-long">Cours & Quiz</span>
+      <span class="nav-text-short">Cours</span>
     </button>
     <button class="nav-btn" data-target="revision-view">
-      <span>♻️</span> Mes Erreurs
+      <span>♻️</span>
+      <span class="nav-text-long">Mes Erreurs</span>
+      <span class="nav-text-short">Erreurs</span>
     </button>
     <button class="nav-btn" data-target="duels-view">
-      <span>⚔️</span> Duels 1v1
+      <span>⚔️</span>
+      <span class="nav-text-long">Duels 1v1</span>
+      <span class="nav-text-short">Duels</span>
     </button>
     <button class="nav-btn" data-target="shop-view">
-      <span>🛒</span> Boutique
+      <span>🛒</span>
+      <span class="nav-text-long">Boutique</span>
+      <span class="nav-text-short">Boutique</span>
     </button>
     <button class="nav-btn" data-target="profile-view">
-      <span>📊</span> Profil
+      <span>📊</span>
+      <span class="nav-text-long">Profil</span>
+      <span class="nav-text-short">Profil</span>
     </button>
     <button class="nav-btn" data-target="csv-view">
-      <span>📥</span> Importer
+      <span>📥</span>
+      <span class="nav-text-long">Importer</span>
+      <span class="nav-text-short">Importer</span>
     </button>
     <button class="nav-btn" data-target="community-view">
-      <span>🌐</span> Communauté
+      <span>🌐</span>
+      <span class="nav-text-long">Communauté</span>
+      <span class="nav-text-short">Commu</span>
     </button>
     <button class="nav-btn" id="nav-admin-btn" data-target="admin-view" style="display: none; color: var(--accent-red);">
-      <span>⚙️</span> Modération
+      <span>⚙️</span>
+      <span class="nav-text-long">Modération</span>
+      <span class="nav-text-short">Modé</span>
     </button>
   </nav>
 
@@ -489,6 +505,8 @@
           <h2 id="prof-name">Réviseur Pro</h2>
           <p style="color: var(--accent-cyan); font-weight: 600;" id="prof-title">Novice de Révision</p>
           <p style="color: var(--text-secondary); margin-top: 0.5rem;" id="prof-level-info">Niveau 1 (0 / 120 XP)</p>
+          <!-- Equipped Badges Container -->
+          <div id="prof-equipped-badges" style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; justify-content: flex-start; align-items: center;"></div>
           <button class="btn-secondary" id="btn-change-username" style="margin-top: 0.5rem; padding: 0.35rem 0.75rem; font-size: 0.8rem;">✏️ Nom d'affichage (Amis/Duels)</button>
         </div>
       </div>

@@ -249,21 +249,22 @@ async function pushProfileToCloud(username, hashedKey, profile, srsData, subject
       updated_at: Date.now()
     };
 
+    try {
+      const subjectsStr = JSON.stringify(subjectsData || {});
+      if (subjectsStr.length < 1024 * 1024 * 2) { 
+        payload.subjects_data = subjectsData;
+      }
+    } catch (e) {}
+
     // Update local timestamp to prevent our own push from triggering a pull
     try { localStorage.setItem('remix_last_cloud_sync', payload.updated_at.toString()); } catch(e){}
 
-    // Use UPDATE by default to avoid overwriting omitted columns (like subjects_data) to NULL
+    // Use UPDATE by default to avoid overwriting omitted columns
     const { data, error } = await db.from('profiles').update(payload).eq('id', session.user.id).select('id');
 
     // If row doesn't exist yet, fallback to INSERT
     if ((!error && (!data || data.length === 0)) || (error && error.code === 'PGRST116')) {
       payload.id = session.user.id;
-      try {
-        const subjectsStr = JSON.stringify(subjectsData || {});
-        if (subjectsStr.length < 1024 * 1024 * 2) { 
-          payload.subjects_data = subjectsData;
-        }
-      } catch (e) {}
       await db.from('profiles').insert(payload);
     }
   } catch (e) {
@@ -283,7 +284,7 @@ async function fetchProfileFromCloud(username, hashedKey, includeSubjects = fals
     if (includeSubjects) {
       query = query.select('*');
     } else {
-      query = query.select('id, username, hashed_key, profile_data, friend_id, srs_data, paused_session, updated_at');
+      query = query.select('id, username, hashed_key, profile_data, friend_id, srs_data, updated_at');
     }
 
     const { data, error } = await query.eq('id', session.user.id).maybeSingle();
@@ -479,11 +480,16 @@ async function fetchPendingCommunitySubjects() {
     const db = getDB();
     if (!db) return [];
     const { data, error } = await db.from('community_subjects')
-      .select('*')
+      .select('id, subject_name, author, category, created_at, status, questions_data')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    
+    // Parse questions_data if it's a JSON string
+    return (data || []).map(row => ({
+      ...row,
+      questions_data: typeof row.questions_data === 'string' ? JSON.parse(row.questions_data) : row.questions_data
+    }));
   } catch (e) {
     console.error('fetchPendingCommunitySubjects failed:', e.message);
     return [];
@@ -499,10 +505,35 @@ async function fetchAcceptedCommunitySubjects() {
       .eq('status', 'accepted')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    
+    // Parse questions_data if it's a JSON string
+    return (data || []).map(row => ({
+      ...row,
+      questions_data: typeof row.questions_data === 'string' ? JSON.parse(row.questions_data) : row.questions_data
+    }));
   } catch (e) {
     console.error('fetchAcceptedCommunitySubjects failed:', e.message);
     return [];
+  }
+}
+
+async function fetchCommunitySubjectData(subjectId) {
+  try {
+    const db = getDB();
+    if (!db) return null;
+    const { data, error } = await db.from('community_subjects')
+      .select('questions_data')
+      .eq('id', subjectId)
+      .single();
+    if (error) throw error;
+    if (!data) return null;
+    
+    // Parse questions_data if it's a JSON string
+    const questionsData = data.questions_data;
+    return typeof questionsData === 'string' ? JSON.parse(questionsData) : questionsData;
+  } catch (e) {
+    console.error('fetchCommunitySubjectData failed:', e.message);
+    return null;
   }
 }
 
@@ -731,7 +762,17 @@ function computeAntiCheatToken(profile) {
   return `sig_${Math.abs(hash).toString(16)}`;
 }
 
+let subscribers = [];
+
 class StorageManager {
+  static subscribe(fn) {
+    subscribers.push(fn);
+  }
+
+  static notify() {
+    subscribers.forEach(fn => fn());
+  }
+
   static computeSignature(profile) {
     return computeAntiCheatToken(profile);
   }
@@ -745,16 +786,48 @@ class StorageManager {
   static getSubjects() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
-      if (!data) { this.saveSubjects(DEFAULT_SUBJECTS); return DEFAULT_SUBJECTS; }
+      if (!data) { return { ...DEFAULT_SUBJECTS }; }
+      
       const custom = JSON.parse(data);
-      return { ...DEFAULT_SUBJECTS, ...custom };
-    } catch (e) { return DEFAULT_SUBJECTS; }
+      const reconstructed = { ...DEFAULT_SUBJECTS };
+      
+      Object.keys(custom).forEach(id => {
+        if (DEFAULT_SUBJECTS[id]) {
+          if (custom[id].deleted) {
+            delete reconstructed[id];
+          } else {
+            reconstructed[id] = { ...DEFAULT_SUBJECTS[id], ...custom[id], qcm: DEFAULT_SUBJECTS[id].qcm };
+          }
+        } else {
+          reconstructed[id] = custom[id];
+        }
+      });
+      return reconstructed;
+    } catch (e) { return { ...DEFAULT_SUBJECTS }; }
   }
 
   static saveSubjects(subjects) {
     try {
-      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+      const optimizedSubjects = {};
+      Object.keys(subjects).forEach(id => {
+        if (DEFAULT_SUBJECTS[id]) {
+          const optimized = { ...subjects[id] };
+          delete optimized.qcm;
+          optimizedSubjects[id] = optimized;
+        } else {
+          optimizedSubjects[id] = subjects[id];
+        }
+      });
+      
+      Object.keys(DEFAULT_SUBJECTS).forEach(id => {
+        if (!subjects[id]) {
+          optimizedSubjects[id] = { id: id, deleted: true };
+        }
+      });
+
+      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(optimizedSubjects));
       this.autoSyncCloud();
+      this.notify();
     } catch (e) {}
   }
 
@@ -767,7 +840,10 @@ class StorageManager {
 
   static removeSubject(subjectId) {
     const subjects = this.getSubjects();
-    if (subjects[subjectId]) { delete subjects[subjectId]; this.saveSubjects(subjects); }
+    if (subjects[subjectId]) { 
+      delete subjects[subjectId];
+      this.saveSubjects(subjects); 
+    }
     return subjects;
   }
 
@@ -803,6 +879,7 @@ class StorageManager {
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
       this.registerGlobalPlayer(profile);
       this.autoSyncCloud();
+      this.notify();
     } catch (e) {}
   }
 
@@ -927,16 +1004,17 @@ class StorageManager {
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return false;
     const { username, hashedKey } = profile.cloudAccount;
 
-    // Lightweight heartbeat check: only download profile if newer than our last sync
-    const cloudTimestamp = await checkCloudUpdateTimestamp();
-    const localTimestamp = parseInt(localStorage.getItem('remix_last_cloud_sync') || '0');
+    // Parse timestamps as numbers (Epoch time in ms)
+    const cloudTimestamp = Number(await checkCloudUpdateTimestamp()) || 0;
+    const localTimestampStr = localStorage.getItem('remix_last_cloud_sync');
+    const localTimestamp = localTimestampStr ? Number(localTimestampStr) : 0;
     
     if (cloudTimestamp <= localTimestamp && cloudTimestamp !== 0) {
       return false; // Up to date, no need to download 1.6MB!
     }
 
-    // Pass false to exclude subjects_data (saves 300KB)
-    const cloudData = await fetchProfileFromCloud(username, hashedKey, false);
+    // Pass true to include subjects_data
+    const cloudData = await fetchProfileFromCloud(username, hashedKey, true);
     if (!cloudData) return false;
 
     // Update local sync timestamp
@@ -947,6 +1025,8 @@ class StorageManager {
     if (cloudData.profile_data) {
       const currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
       const mergedProf = mergeProfileData(currentProfile, cloudData.profile_data);
+      // Ensure we re-compute anti-cheat token so we don't accidentally ban the user
+      mergedProf.checksumToken = computeAntiCheatToken(mergedProf);
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProf));
     }
     if (cloudData.srs_data) {
@@ -954,8 +1034,12 @@ class StorageManager {
       if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
     }
     if (cloudData.subjects_data) {
-      const currentSubjects = this.getSubjects();
-      const mergedSubs = mergeSubjectsData(currentSubjects, cloudData.subjects_data);
+      let localOptimized = {};
+      try {
+        const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+        if (str) localOptimized = JSON.parse(str);
+      } catch(e) {}
+      const mergedSubs = mergeSubjectsData(localOptimized, cloudData.subjects_data);
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
     }
     if (cloudData.paused_session) {
@@ -971,24 +1055,31 @@ class StorageManager {
     const profile = this.getProfile();
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return;
     const { username, hashedKey } = profile.cloudAccount;
-    // Also update localStorage cloud key for offline fallback
+    
+    // Read optimized subjects directly from localStorage to push a lightweight payload
+    let optimizedSubjectsToPush = {};
+    try {
+      const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+      if (str) optimizedSubjectsToPush = JSON.parse(str);
+    } catch(e) {}
+
     const cloudKey = `remix_cloud_db_${username}_${hashedKey}`;
     const payload = {
       profile,
       srs: this.getSRSData(),
-      subjects: this.getSubjects(),
+      subjects: optimizedSubjectsToPush,
       pausedSession: this.getPausedSession(),
       revisionItems: this.getRevisionItems(),
       updatedAt: Date.now()
     };
     try { localStorage.setItem(cloudKey, JSON.stringify(payload)); } catch (e) {}
-    // Sync to Supabase
+    
     pushProfileToCloud(
       username,
       hashedKey,
       profile,
       this.getSRSData(),
-      this.getSubjects(),
+      optimizedSubjectsToPush,
       this.getPausedSession(),
       this.getRevisionItems()
     ).catch(() => {});
@@ -1045,7 +1136,7 @@ class StorageManager {
       let cleanUser = (authData.user.user_metadata?.username || 'Joueur').toLowerCase().replace(/[^a-z0-9_éèêëàâäôöûüùîïçœæ-]/g, '');
 
       // Try Supabase Cloud first
-      const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2');
+      const cloudData = await fetchProfileFromCloud(cleanUser, 'supabase_auth_v2', true);
       if (cloudData) {
         if (cloudData.username) {
           cleanUser = cloudData.username;
@@ -1059,7 +1150,15 @@ class StorageManager {
 
           if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
         }
-        if (cloudData.subjects_data) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(cloudData.subjects_data));
+        if (cloudData.subjects_data) {
+          let localOptimized = {};
+          try {
+            const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+            if (str) localOptimized = JSON.parse(str);
+          } catch(e) {}
+          const mergedSubs = mergeSubjectsData(localOptimized, cloudData.subjects_data);
+          localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
+        }
         if (cloudData.paused_session) {
           localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
         } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
@@ -1071,6 +1170,8 @@ class StorageManager {
           this.saveProfile(profile);
           saveFriendId(cleanUser, 'supabase_auth_v2', profile.friendId).catch(() => {});
         }
+        // Push merged state back to cloud immediately
+        await this.autoSyncCloud();
         return { success: true, isNew: false, profile };
       }
 
@@ -1446,7 +1547,8 @@ class CSVParser {
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if ((char === '\t' || char === ';') && !inQuotes) {
-        currentRecord.append ? currentRecord.push(currentField.trim()) : (currentRecord = [currentField.trim()]);
+        // add the current field to the current record
+        currentRecord.push(currentField.trim());
         currentField = '';
       } else if (char === '\n' && !inQuotes) {
         currentRecord.push(currentField.trim());
@@ -1557,8 +1659,13 @@ class CSVParser {
           });
         } else {
           let opts = [];
+          let explanation = `Réponse : ${aClean}`;
           if (r.length >= 5 && !isAnkiDeck) {
             opts = [aClean, this.cleanHTML(r[2]), this.cleanHTML(r[3]), this.cleanHTML(r[4])];
+            if (r.length >= 6) {
+              const explicitExpl = this.cleanHTML(r[5]);
+              if (explicitExpl) explanation = explicitExpl;
+            }
           } else {
             allAnswers.push(aClean);
             opts = [aClean]; // Will generate distractors below
@@ -1569,7 +1676,7 @@ class CSVParser {
             question: qClean,
             correct: aClean,
             options: opts,
-            explanation: `Réponse : ${aClean}`
+            explanation: explanation
           });
         }
       }
@@ -2715,6 +2822,18 @@ const safeOn = (id, event, fn) => {
 class AppController {
   constructor() {
     this.quizEngine = new QuizEngine();
+    this.currentView = 'subjects-view';
+    this.currentFolderPath = [];
+    this._eventListenersSetup = false;
+    this.pendingNewQuiz = null;
+
+    // Selection mode state
+    this.isSelectMode = false;
+    this.selectedSubjects = new Set();
+    
+    // Profile sync
+    StorageManager.subscribe(() => { this.renderHeaderStats(); this.updatePausedBanner(); });
+
     this.timerInterval = null;
     this.currentSubjectId = null;
     this.flashcardSession = null;
@@ -3334,9 +3453,39 @@ class AppController {
       return;
     }
 
+    // Toggle Action bar if select mode
+    const actionBar = document.getElementById('selection-action-bar');
+    if (actionBar) {
+      actionBar.style.display = this.isSelectMode ? 'flex' : 'none';
+      if (this.isSelectMode) {
+        document.getElementById('selection-count').textContent = this.selectedSubjects.size;
+      }
+    }
+
     const currentDepth = this.currentFolderPath.length;
     const subfoldersMap = new Map();
     const directDecks = [];
+    
+    // Inject custom folders
+    const profile = StorageManager.getProfile();
+    if (profile.customFolders) {
+      profile.customFolders.forEach(cf => {
+        if (cf.pathParts.length === currentDepth + 1) {
+          let matches = true;
+          for (let i = 0; i < currentDepth; i++) {
+            if (cf.pathParts[i] !== this.currentFolderPath[i]) {
+              matches = false; break;
+            }
+          }
+          if (matches) {
+            const folderName = cf.pathParts[currentDepth];
+            if (!subfoldersMap.has(folderName)) {
+              subfoldersMap.set(folderName, { name: folderName, deckCount: 0, questionCount: 0, decks: [], customIcon: cf.icon });
+            }
+          }
+        }
+      });
+    }
 
     Object.values(subjects).forEach(sub => {
       if (selectedCategory !== 'ALL' && sub.category !== selectedCategory) return;
@@ -3389,14 +3538,22 @@ class AppController {
       });
     }
 
-    subfoldersMap.forEach(folder => {
+    const sortedFolders = Array.from(subfoldersMap.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    sortedFolders.forEach(folder => {
       const card = document.createElement('div');
       card.className = 'folder-card';
-      const icon = folder.name.toLowerCase().includes('anglais') ? '🇬🇧' : (folder.name.toLowerCase().includes('math') ? '📐' : '📁');
+      const icon = folder.customIcon || (folder.name.toLowerCase().includes('anglais') ? '🇬🇧' : (folder.name.toLowerCase().includes('math') ? '📐' : '📁'));
 
       const fMastery = StorageManager.getFolderMastery(folder.decks);
       if (fMastery.borderStyle) card.style.border = fMastery.borderStyle;
       if (fMastery.boxShadow) card.style.boxShadow = fMastery.boxShadow;
+
+      let checkboxHTML = '';
+      if (this.isSelectMode) {
+        // Can't select folders for now, or maybe we can? 
+        // For simplicity, we only select subjects. Wait, if they want to move a folder, it's easier to select subjects.
+        // I won't add checkboxes on folders.
+      }
 
       card.innerHTML = `
         <div>
@@ -3409,11 +3566,111 @@ class AppController {
         </div>
         <div class="folder-meta">
           <span>${folder.questionCount} cartes au total</span>
-          <button class="btn-primary btn-open-folder" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Ouvrir 📂</button>
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn-secondary btn-share-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
+            <button class="btn-secondary btn-edit-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Renommer le dossier">✏️</button>
+            <button class="btn-secondary btn-delete-folder" data-folder="${folder.name}" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce dossier">🗑️</button>
+          </div>
         </div>
       `;
 
-      card.addEventListener('click', () => {
+      card.querySelector('.btn-share-folder').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.shareFolderToCommunity(folder.name, folder.decks);
+      });
+
+      card.querySelector('.btn-edit-folder').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newName = prompt('Nouveau nom pour ce dossier :', folder.name);
+        if (!newName || newName.trim() === '') return;
+        const newIcon = prompt('Nouvelle icône pour ce dossier :', icon) || icon;
+        
+        const profile = StorageManager.getProfile();
+        let folderFoundInProfile = false;
+        if (profile.customFolders) {
+          profile.customFolders.forEach(cf => {
+            if (cf.pathParts.length === this.currentFolderPath.length + 1 &&
+                cf.pathParts[cf.pathParts.length - 1] === folder.name) {
+              let match = true;
+              for (let i = 0; i < this.currentFolderPath.length; i++) {
+                if (cf.pathParts[i] !== this.currentFolderPath[i]) match = false;
+              }
+              if (match) {
+                cf.pathParts[cf.pathParts.length - 1] = newName.trim();
+                cf.customIcon = newIcon;
+                folderFoundInProfile = true;
+              }
+            }
+          });
+        }
+        
+        if (!folderFoundInProfile) {
+          if (!profile.customFolders) profile.customFolders = [];
+          profile.customFolders.push({
+            pathParts: [...this.currentFolderPath, newName.trim()],
+            customIcon: newIcon
+          });
+        }
+        StorageManager.saveProfile(profile);
+
+        const subjects = StorageManager.getSubjects();
+        let subjectsModified = false;
+        folder.decks.forEach(sub => {
+          if (subjects[sub.id] && subjects[sub.id].pathParts) {
+            const depth = this.currentFolderPath.length;
+            if (subjects[sub.id].pathParts[depth] === folder.name) {
+              subjects[sub.id].pathParts[depth] = newName.trim();
+              subjectsModified = true;
+            }
+          }
+        });
+        
+        if (subjectsModified) {
+          StorageManager.saveSubjects(subjects);
+        }
+        this.renderSubjects();
+      });
+
+      card.querySelector('.btn-delete-folder').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`Voulez-vous vraiment supprimer le dossier "${folder.name}" et TOUT son contenu (${folder.deckCount} éléments) ?`)) {
+          // Delete from custom folders
+          const profile = StorageManager.getProfile();
+          if (profile.customFolders) {
+            profile.customFolders = profile.customFolders.filter(cf => {
+              // Same depth and same name
+              if (cf.pathParts.length !== this.currentFolderPath.length + 1) return true;
+              if (cf.pathParts[cf.pathParts.length - 1] !== folder.name) return true;
+              // Check parents
+              for (let i = 0; i < this.currentFolderPath.length; i++) {
+                if (cf.pathParts[i] !== this.currentFolderPath[i]) return true;
+              }
+              return false; // exclude this one
+            });
+            StorageManager.saveProfile(profile);
+          }
+
+          // Delete all subjects inside this folder
+          const subjects = StorageManager.getSubjects();
+          let subjectsModified = false;
+          
+          folder.decks.forEach(sub => {
+            if (subjects[sub.id]) {
+              delete subjects[sub.id];
+              subjectsModified = true;
+            }
+          });
+
+          if (subjectsModified) {
+            StorageManager.saveSubjects(subjects);
+          }
+
+          this.renderSubjects();
+        }
+      });
+
+      card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
         this.currentFolderPath.push(folder.name);
         this.renderSubjects();
         SoundFX.playClick();
@@ -3422,9 +3679,40 @@ class AppController {
       container.appendChild(card);
     });
 
-    directDecks.forEach(sub => {
+    const sortedDecks = [...directDecks].sort((a, b) => {
+      const aName = a.pathParts ? a.pathParts[a.pathParts.length - 1] : a.name;
+      const bName = b.pathParts ? b.pathParts[b.pathParts.length - 1] : b.name;
+      return aName.localeCompare(bName, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    sortedDecks.forEach(sub => {
       this.renderDeckCard(container, sub);
     });
+
+    if (sortedFolders.length === 0 && sortedDecks.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.style.cssText = 'grid-column: 1/-1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem 1.5rem; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: var(--radius-lg); margin-top: 1rem;';
+      emptyState.innerHTML = `
+        <span style="font-size: 3rem; margin-bottom: 1rem;">📭</span>
+        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: white;">Aucun cours disponible</h3>
+        <p style="color: var(--text-secondary); max-width: 400px; margin-bottom: 1.5rem; font-size: 0.95rem;">
+          Vous n'avez pas encore importé de cours. Vous pouvez en importer gratuitement depuis la communauté ou importer vos propres fichiers CSV !
+        </p>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center;">
+          <button id="btn-empty-goto-community" class="btn-primary" style="font-size: 0.9rem; padding: 0.6rem 1.2rem;">🌐 Découvrir la Communauté</button>
+          <button id="btn-empty-goto-import" class="btn-secondary" style="font-size: 0.9rem; padding: 0.6rem 1.2rem;">📥 Importer un fichier</button>
+        </div>
+      `;
+      
+      emptyState.querySelector('#btn-empty-goto-community').addEventListener('click', () => {
+        this.switchView('community-view');
+      });
+      emptyState.querySelector('#btn-empty-goto-import').addEventListener('click', () => {
+        this.switchView('csv-view');
+      });
+      
+      container.appendChild(emptyState);
+    }
 
     this.triggerMathJax();
   }
@@ -3433,11 +3721,23 @@ class AppController {
     const card = document.createElement('div');
     card.className = 'subject-card';
     const qCount = sub.questions ? sub.questions.length : 0;
-    const cleanName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+    let cleanName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+    // Remove [CSV] if present
+    cleanName = cleanName.replace(/\[CSV\]/g, '').trim();
 
     const dMastery = StorageManager.getDeckMastery(sub);
     if (dMastery.borderStyle) card.style.border = dMastery.borderStyle;
     if (dMastery.boxShadow) card.style.boxShadow = dMastery.boxShadow;
+
+    let checkboxHTML = '';
+    if (this.isSelectMode) {
+      const isSelected = this.selectedSubjects.has(sub.id);
+      checkboxHTML = `<input type="checkbox" class="subject-checkbox" ${isSelected ? 'checked' : ''} style="transform: scale(1.5); cursor: pointer;">`;
+      if (isSelected) {
+        card.style.border = '2px solid var(--accent-cyan)';
+        card.style.background = 'rgba(6, 182, 212, 0.1)';
+      }
+    }
 
     card.innerHTML = `
       <div>
@@ -3445,7 +3745,10 @@ class AppController {
           <span class="subject-icon">${sub.icon || '📚'}</span>
           <div style="overflow: hidden; flex: 1;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.25rem;">
-              <h3 class="subject-title" style="font-size: 1.1rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${cleanName}</h3>
+              <div style="display: flex; gap: 0.5rem; align-items: center; overflow: hidden;">
+                ${checkboxHTML}
+                <h3 class="subject-title" style="font-size: 1.1rem; word-break: break-word;">${cleanName}</h3>
+              </div>
               <span class="level-badge" style="background: rgba(0,0,0,0.4); border: 1px solid ${dMastery.colorHex}; color: ${dMastery.colorHex}; font-size: 0.75rem; white-space: nowrap;">${dMastery.statusText}</span>
             </div>
             <span class="level-badge" style="background: rgba(255,255,255,0.1); color: var(--accent-cyan); font-size: 0.75rem;">${sub.category || 'Général'}</span>
@@ -3455,12 +3758,83 @@ class AppController {
       </div>
       <div class="subject-footer">
         <span>${qCount} Cartes</span>
-        <div style="display: flex; gap: 0.4rem;">
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end;">
+          <button class="btn-secondary btn-icon-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Changer l'icône">🎨</button>
+          <button class="btn-secondary btn-rename-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Renommer">✏️</button>
           <button class="btn-secondary btn-organize-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Déplacer vers un dossier">⚙️ Organiser</button>
+          <button class="btn-secondary btn-share-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
+          <button class="btn-secondary btn-delete-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce paquet">🗑️</button>
           <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
         </div>
       </div>
     `;
+
+    if (this.isSelectMode) {
+      card.addEventListener('click', (e) => {
+        // Prevent toggle if clicking on buttons
+        if (e.target.tagName === 'BUTTON') return;
+        
+        if (this.selectedSubjects.has(sub.id)) {
+          this.selectedSubjects.delete(sub.id);
+        } else {
+          this.selectedSubjects.add(sub.id);
+        }
+        this.renderSubjects();
+      });
+    }
+
+    card.querySelector('.btn-delete-deck').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`Voulez-vous vraiment supprimer le paquet "${cleanName}" ?`)) {
+        const subjects = StorageManager.getSubjects();
+        delete subjects[sub.id];
+        StorageManager.saveSubjects(subjects);
+        this.renderSubjects();
+      }
+    });
+
+    const btnShareDeck = card.querySelector('.btn-share-deck');
+    if (btnShareDeck) {
+      btnShareDeck.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.shareDeckToCommunity(sub.id);
+      });
+    }
+
+    const btnRenameDeck = card.querySelector('.btn-rename-deck');
+    if (btnRenameDeck) {
+      btnRenameDeck.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newName = prompt('Nouveau nom pour ce paquet :', cleanName);
+        if (newName && newName.trim() !== '') {
+          const subjects = StorageManager.getSubjects();
+          if (subjects[sub.id]) {
+            if (subjects[sub.id].pathParts) {
+              subjects[sub.id].pathParts[subjects[sub.id].pathParts.length - 1] = newName.trim();
+            }
+            subjects[sub.id].name = newName.trim();
+            StorageManager.saveSubjects(subjects);
+            this.renderSubjects();
+          }
+        }
+      });
+    }
+
+    const btnIconDeck = card.querySelector('.btn-icon-deck');
+    if (btnIconDeck) {
+      btnIconDeck.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newIcon = prompt('Nouvelle icône pour ce paquet (ex: 📚, 🔬) :', sub.icon || '📚');
+        if (newIcon && newIcon.trim() !== '') {
+          const subjects = StorageManager.getSubjects();
+          if (subjects[sub.id]) {
+            subjects[sub.id].icon = newIcon.trim();
+            StorageManager.saveSubjects(subjects);
+            this.renderSubjects();
+          }
+        }
+      });
+    }
 
     card.querySelector('.btn-start-quiz').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3469,21 +3843,85 @@ class AppController {
 
     card.querySelector('.btn-organize-deck').addEventListener('click', (e) => {
       e.stopPropagation();
-      const currentPath = (sub.pathParts || [sub.name]).join(' / ');
-      const newPathStr = prompt('Modifiez le chemin du dossier (séparez les dossiers par des barres obliques " / ") :', currentPath);
-      if (newPathStr !== null && newPathStr.trim() !== '') {
-        const newPathParts = newPathStr.split('/').map(p => p.trim()).filter(p => p);
-        if (newPathParts.length > 0) {
-          sub.pathParts = newPathParts;
-          const subjects = StorageManager.getSubjects();
-          subjects[sub.id] = sub;
-          StorageManager.saveSubjects(subjects);
-          this.renderSubjects();
-        }
-      }
+      const subjectName = sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name;
+      this.openFolderSelector((newPathParts) => {
+        sub.pathParts = newPathParts;
+        const subjects = StorageManager.getSubjects();
+        subjects[sub.id] = sub;
+        StorageManager.saveSubjects(subjects);
+        this.renderSubjects();
+      }, subjectName);
     });
 
     container.appendChild(card);
+  }
+
+  async shareFolderToCommunity(folderName, decks) {
+    const profile = StorageManager.getProfile();
+    const author = profile.cloudAccount?.username || profile.name || 'Joueur Anonyme';
+
+    if (!confirm(`Partager le dossier "${folderName}" (contenant ${decks.length} cours) à la communauté ?`)) return;
+
+    const folderData = {
+      is_folder: true,
+      subjects: decks
+    };
+
+    const category = prompt(`Catégorie pour le dossier "${folderName}" :`, 'Général') || 'Général';
+    
+    // Check total size
+    const jsonStr = JSON.stringify(folderData);
+    if (jsonStr.length > 5000000) {
+      alert("Le dossier est trop volumineux pour être partagé en une seule fois (max ~5MB).");
+      return;
+    }
+
+    const btn = document.querySelector(`.btn-share-folder[data-folder="${folderName}"]`);
+    if (btn) btn.textContent = '⏳...';
+
+    const success = await submitCommunitySubject(folderName, author, category, folderData);
+    
+    if (success) {
+      alert('Dossier soumis à la communauté avec succès ! Il sera disponible après validation.');
+      if (btn) { btn.textContent = '✅'; btn.disabled = true; }
+    } else {
+      alert('Erreur lors de la soumission du dossier.');
+      if (btn) btn.textContent = '🌐';
+    }
+  }
+
+  async shareDeckToCommunity(subjectId) {
+    const subjects = StorageManager.getSubjects();
+    const sub = subjects[subjectId];
+    if (!sub) return;
+
+    const profile = StorageManager.getProfile();
+    const author = profile.cloudAccount?.username || profile.name || 'Joueur Anonyme';
+    const cleanName = (sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name).replace(/\[CSV\]/g, '').trim();
+
+    if (!confirm(`Partager le cours "${cleanName}" (${sub.questions ? sub.questions.length : 0} questions) à la communauté ?`)) return;
+
+    const category = prompt(`Catégorie pour "${cleanName}" :`, sub.category || 'Général') || 'Général';
+    
+    // Check total size
+    const jsonStr = JSON.stringify(sub.questions || []);
+    if (jsonStr.length > 5000000) {
+      alert("Le cours est trop volumineux pour être partagé (max ~5MB).");
+      return;
+    }
+
+    const btn = document.querySelector(`.btn-share-deck[data-sub="${subjectId}"]`);
+    if (btn) btn.textContent = '⏳...';
+
+    const success = await submitCommunitySubject(cleanName, author, category, sub.questions || []);
+    
+    if (success) {
+      alert('Cours soumis à la communauté avec succès ! Il sera disponible après validation.');
+      if (btn) { btn.textContent = '✅'; btn.disabled = true; }
+    } else {
+      alert('Erreur lors de la soumission du cours.');
+      if (btn) btn.textContent = '🌐';
+    }
   }
 
   async renderDuelsView() {
@@ -4859,6 +5297,26 @@ class AppController {
     document.getElementById('prof-title').textContent = GamificationEngine.getLevelTitle(profile.level);
     document.getElementById('prof-level-info').textContent = `Niveau ${profile.level} (${profile.xp} / ${GamificationEngine.getRequiredXP(profile.level)} XP)`;
 
+    const equippedBadgesContainer = document.getElementById('prof-equipped-badges');
+    if (equippedBadgesContainer) {
+      equippedBadgesContainer.innerHTML = '';
+      const selected = profile.selectedBadges || [];
+      if (selected.length > 0) {
+        selected.forEach(achId => {
+          const ach = ACHIEVEMENTS.find(a => a.id === achId);
+          if (ach) {
+            const badgeEl = document.createElement('div');
+            badgeEl.className = 'level-badge';
+            badgeEl.style.cssText = 'background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent-purple); color: white; display: flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.65rem; font-size: 0.80rem; font-weight: 600; border-radius: var(--radius-full);';
+            badgeEl.innerHTML = `<span>${ach.icon}</span> <span>${ach.title}</span>`;
+            equippedBadgesContainer.appendChild(badgeEl);
+          }
+        });
+      } else {
+        equippedBadgesContainer.innerHTML = `<span style="font-size: 0.8rem; color: var(--text-secondary); font-style: italic;">Aucun badge affiché. Cliquez sur "Afficher sur le profil" ci-dessous pour en équiper !</span>`;
+      }
+    }
+
     const cloudStatus = document.getElementById('cloud-sync-status');
     if (cloudStatus && profile.cloudAccount) {
       cloudStatus.style.color = 'var(--accent-green)';
@@ -4954,7 +5412,8 @@ class AppController {
       card.style.flexWrap = 'wrap';
       card.style.gap = '1rem';
 
-      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+      const itemDesc = `Taille non calculée (charger pour voir)`;
+      const itemIcon = '📦';
 
       let adminDeleteBtn = '';
       const profile = StorageManager.getProfile();
@@ -4964,10 +5423,10 @@ class AppController {
 
       card.innerHTML = `
         <div style="flex: 1;">
-          <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${sub.subject_name}</div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${sub.questions_data.length} questions • ${sub.category}</div>
+          <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">${itemIcon} ${sub.subject_name}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">Par <strong>${sub.author}</strong> • ${sub.category}</div>
           <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; border-left: 2px solid var(--accent-cyan); padding-left: 0.5rem;">
-            ${qPreview} ...
+            Aperçu non disponible. Téléchargez le contenu pour y accéder.
           </div>
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -4977,21 +5436,45 @@ class AppController {
       `;
 
       const btn = card.querySelector('.btn-import-community');
-      btn.onclick = () => {
-        const newSubject = {
-          id: `community_sub_${sub.id}_${Date.now()}`,
-          name: sub.subject_name,
-          pathParts: [sub.category, sub.subject_name],
-          icon: '🌐',
-          category: sub.category,
-          description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
-          verified: true,
-          questions: sub.questions_data
-        };
-        StorageManager.addSubject(newSubject);
+      btn.onclick = async () => {
+        btn.textContent = '⏳ Chargement...';
+        btn.disabled = true;
+        const questionsData = await fetchCommunitySubjectData(sub.id);
+        
+        if (!questionsData) {
+            btn.textContent = '❌ Erreur';
+            alert('Impossible de télécharger le contenu du paquet.');
+            return;
+        }
+
+        const isFolder = questionsData.is_folder === true;
+
+        if (isFolder) {
+          questionsData.subjects.forEach((nestedSub, idx) => {
+            const newSubject = {
+              ...nestedSub,
+              id: `community_sub_${sub.id}_${idx}_${Date.now()}`,
+              description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
+              verified: true
+            };
+            StorageManager.addSubject(newSubject);
+          });
+        } else {
+          const newSubject = {
+            id: `community_sub_${sub.id}_${Date.now()}`,
+            name: sub.subject_name,
+            pathParts: [sub.category, sub.subject_name],
+            icon: '🌐',
+            category: sub.category,
+            description: `Importé depuis la communauté (Auteur: ${sub.author}).`,
+            verified: true,
+            questions: questionsData
+          };
+          StorageManager.addSubject(newSubject);
+        }
+        
         btn.textContent = '✅ Importé !';
         btn.style.backgroundColor = 'var(--accent-green)';
-        btn.disabled = true;
       };
 
       const btnDelete = card.querySelector('.btn-delete-community');
@@ -5016,6 +5499,76 @@ class AppController {
     });
   }
 
+  openAdminPreview(sub) {
+    const modal = document.getElementById('modal-admin-qcm-preview');
+    const content = document.getElementById('admin-qcm-preview-content');
+    
+    if (!sub || !sub.questions_data) {
+      content.innerHTML = '<div style="color: var(--accent-red);">Erreur : données de questions manquantes.</div>';
+      modal.classList.add('active');
+      return;
+    }
+    
+    content.innerHTML = '';
+    
+    const questionsData = sub.questions_data || [];
+    const isFolder = questionsData && questionsData.is_folder === true;
+    
+    if (isFolder) {
+      const subjectsCount = questionsData.subjects?.length || 0;
+      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Dossier : ${sub.subject_name} (${subjectsCount} cours)</h3>`;
+      const subjects = questionsData.subjects || [];
+      subjects.forEach((nestedSub, idx) => {
+        let html = `<div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1rem;">`;
+        html += `<h4 style="margin-bottom: 0.5rem; color: white;">Cours ${idx + 1} : ${nestedSub.name}</h4>`;
+        if (nestedSub.questions) {
+          nestedSub.questions.forEach((q, qIdx) => {
+            const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
+            const wrongAns = q.options ? q.options.filter(opt => opt !== ans).join(', ') : (q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : ''));
+            const explanation = q.explanation || q.feedback || '';
+            
+            html += `<div style="font-size: 0.85rem; margin-bottom: 0.75rem; border-left: 2px solid var(--accent-green); padding-left: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 6px;">`;
+            html += `<div style="margin-bottom: 0.25rem;"><span style="color: var(--text-secondary);">Q${qIdx+1}:</span> ${q.question}</div>`;
+            html += `<div><span style="color: var(--text-secondary);">Vrai:</span> <span style="color: var(--accent-green);">${ans}</span></div>`;
+            if (wrongAns) {
+              html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem; margin-top: 0.2rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+            }
+            if (explanation) {
+              html += `<div style="color: var(--accent-blue); font-size: 0.8rem; margin-top: 0.2rem;"><strong>Explication:</strong> ${explanation}</div>`;
+            }
+            html += `</div>`;
+          });
+        }
+        html += `</div>`;
+        content.innerHTML += html;
+      });
+    } else {
+      const questionsCount = Array.isArray(questionsData) ? questionsData.length : 0;
+      content.innerHTML = `<h3 style="color: var(--accent-cyan); margin-bottom: 1rem;">Paquet : ${sub.subject_name} (${questionsCount} questions)</h3>`;
+      if (Array.isArray(questionsData)) {
+        questionsData.forEach((q, qIdx) => {
+          const ans = q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A');
+          const wrongAns = q.options ? q.options.filter(opt => opt !== ans).join(', ') : (q.incorrect ? q.incorrect.join(', ') : (q.incorrect_answers ? q.incorrect_answers.join(', ') : ''));
+          const explanation = q.explanation || q.feedback || '';
+          
+          let html = `<div style="font-size: 0.9rem; margin-bottom: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">`;
+          html += `<div style="margin-bottom: 0.25rem;"><strong>Q${qIdx+1}:</strong> ${q.question}</div>`;
+          html += `<div style="color: var(--accent-green);"><strong>Vrai:</strong> ${ans}</div>`;
+          if (wrongAns) {
+            html += `<div style="color: var(--accent-red); opacity: 0.8; font-size: 0.8rem; margin-top: 0.2rem;"><strong>Faux:</strong> ${wrongAns}</div>`;
+          }
+          if (explanation) {
+            html += `<div style="color: var(--accent-blue); font-size: 0.85rem; margin-top: 0.3rem;"><strong>Explication:</strong> ${explanation}</div>`;
+          }
+          html += `</div>`;
+          content.innerHTML += html;
+        });
+      }
+    }
+
+    modal.classList.add('active');
+  }
+
   async renderAdminSubjects() {
     const container = document.getElementById('admin-list-container');
     if (!container) return;
@@ -5036,12 +5589,17 @@ class AppController {
       card.style.borderRadius = 'var(--radius-md)';
       card.style.marginBottom = '1rem';
 
-      const qPreview = sub.questions_data.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>');
+      const questionsData = sub.questions_data || [];
+      const isFolder = questionsData && questionsData.is_folder === true;
+      const qCount = isFolder ? (questionsData.subjects?.length || 0) : (Array.isArray(questionsData) ? questionsData.length : 0);
+      const qPreview = isFolder 
+        ? `${qCount} cours inclus.`
+        : (Array.isArray(questionsData) ? questionsData.slice(0, 2).map(q => `Q: ${q.question} | R: ${q.correct !== undefined ? q.correct : (q.correct_answer || 'N/A')}`).join('<br>') : 'N/A');
 
       card.innerHTML = `
         <div style="margin-bottom: 1rem;">
           <div style="font-size: 1.1rem; font-weight: 700; color: white;">${sub.subject_name} <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-secondary);">par ${sub.author}</span></div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${sub.questions_data.length} questions</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${qCount} questions</div>
           <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-family: monospace; color: var(--accent-cyan); margin-bottom: 1rem; max-height: 100px; overflow-y: auto;">
             ${qPreview} ...
           </div>
@@ -5049,10 +5607,15 @@ class AppController {
           <input type="text" class="admin-cat-input" value="${sub.category}" style="padding: 0.4rem; background: var(--bg-input); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); width: 150px; margin-left: 0.5rem;">
         </div>
         <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button class="btn-primary btn-preview" style="background: var(--accent-blue); border-color: var(--accent-blue);">👀 Voir Détaillé</button>
           <button class="btn-primary btn-accept" style="background: var(--accent-green); border-color: var(--accent-green);">✅ Accepter</button>
           <button class="btn-primary btn-reject" style="background: var(--accent-red); border-color: var(--accent-red);">❌ Refuser</button>
         </div>
       `;
+
+      card.querySelector('.btn-preview').onclick = () => {
+        this.openAdminPreview(sub);
+      };
 
       card.querySelector('.btn-accept').onclick = async () => {
         const cat = card.querySelector('.admin-cat-input').value;
@@ -5075,6 +5638,7 @@ class AppController {
   setupCSVImporter() {
     const dropZone = document.getElementById('drop-zone-csv');
     const fileInput = document.getElementById('input-csv-file');
+    const folderInput = document.getElementById('input-csv-folder');
 
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -5089,15 +5653,89 @@ class AppController {
       e.preventDefault();
       dropZone.style.borderColor = 'var(--border-color)';
       if (e.dataTransfer.files.length > 0) {
-        this.processCSVFile(e.dataTransfer.files[0]);
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+        if (files.length > 0) this.processCSVFiles(files);
       }
     });
 
     fileInput.addEventListener('change', () => {
       if (fileInput.files.length > 0) {
-        this.processCSVFile(fileInput.files[0]);
+        const files = Array.from(fileInput.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+        if (files.length > 0) this.processCSVFiles(files);
       }
     });
+
+    if (folderInput) {
+      folderInput.addEventListener('change', () => {
+        if (folderInput.files.length > 0) {
+          const files = Array.from(folderInput.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+          if (files.length > 0) this.processCSVFiles(files);
+        }
+      });
+    }
+  }
+
+  async processCSVFiles(files) {
+    const resultBox = document.getElementById('csv-result-box');
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = '<div style="color: var(--accent-cyan);">Importation en cours...</div>';
+
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const file of files) {
+      try {
+        const text = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsText(file, 'UTF-8');
+        });
+
+        const res = CSVParser.parse(text);
+        if (res.success) {
+          let name = file.name.replace(/\.[^/.]+$/, ""); // remove extension
+          name = name.replace(/\[CSV\]/g, '').trim(); // remove [CSV] flag
+
+          let relativeFolders = [];
+          if (file.webkitRelativePath) {
+            const parts = file.webkitRelativePath.split('/');
+            if (parts.length > 1) {
+              relativeFolders = parts.slice(0, parts.length - 1);
+            }
+          }
+
+          const newSubject = {
+            id: `sub_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+            name: name,
+            pathParts: [...this.currentFolderPath, ...relativeFolders, name],
+            icon: '📄',
+            category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',
+            description: `Importé depuis ${file.name} (${res.questions.length} cartes)`,
+            verified: false,
+            questions: res.questions
+          };
+
+          StorageManager.addSubject(newSubject);
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(`Erreur d'importation pour ${file.name}:`, res.error);
+        }
+      } catch (err) {
+        errorCount++;
+        console.error(`Erreur de lecture pour ${file.name}:`, err);
+      }
+    }
+
+    this.renderCategoryFilters();
+    this.renderSubjects();
+
+    resultBox.innerHTML = `
+      <h4 style="color: var(--accent-green); margin-bottom: 0.5rem;">✅ Importation terminée</h4>
+      <p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${successCount}</strong> fichier(s) importé(s) avec succès.</p>
+      ${errorCount > 0 ? `<p style="color: var(--accent-red);">❌ <strong>${errorCount}</strong> fichier(s) ont échoué.</p>` : ''}
+    `;
   }
 
   processCSVFile(file) {
@@ -5119,7 +5757,7 @@ class AppController {
           name: subjectName,
           pathParts: [subjectName],
           icon: res.isAnkiDeck ? '🎴' : '📑',
-          category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours CSV',
+          category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',
           description: res.isAnkiDeck
             ? `Importé depuis Anki (${res.count} cartes avec fausses réponses auto-générées).`
             : `Cours importé avec ${res.count} questions.`,
@@ -5143,7 +5781,7 @@ class AppController {
             btnSubmit.textContent = 'Envoi en cours...';
             const profile = StorageManager.getProfile();
             const author = profile.cloudAccount?.username || 'Anonyme';
-            const category = res.isAnkiDeck ? 'Anki' : 'CSV';
+            const category = res.isAnkiDeck ? 'Anki' : 'Mes Cours';
             const success = await submitCommunitySubject(subjectName, author, category, newSubject.questions);
             if (success) {
               btnSubmit.style.backgroundColor = 'var(--accent-green)';
@@ -5186,6 +5824,65 @@ class AppController {
     });
 
     // Quiz Pause & Resume Buttons
+
+    // --- Selection Mode ---
+    safeOn('btn-toggle-select', 'click', () => {
+      this.isSelectMode = !this.isSelectMode;
+      if (!this.isSelectMode) this.selectedSubjects.clear();
+      this.renderSubjects();
+    });
+
+    safeOn('btn-selection-cancel', 'click', () => {
+      this.isSelectMode = false;
+      this.selectedSubjects.clear();
+      this.renderSubjects();
+    });
+
+    safeOn('btn-selection-delete', 'click', () => {
+      if (this.selectedSubjects.size === 0) return;
+      if (confirm(`Voulez-vous vraiment supprimer les ${this.selectedSubjects.size} éléments sélectionnés ?`)) {
+        const subjects = StorageManager.getSubjects();
+        this.selectedSubjects.forEach(id => delete subjects[id]);
+        StorageManager.saveSubjects(subjects);
+        this.selectedSubjects.clear();
+        this.isSelectMode = false;
+        this.renderSubjects();
+      }
+    });
+
+    safeOn('btn-selection-move', 'click', () => {
+      if (this.selectedSubjects.size === 0) return;
+      
+      this.openFolderSelector((selectedPath) => {
+        const subjects = StorageManager.getSubjects();
+        this.selectedSubjects.forEach(id => {
+          if (subjects[id]) {
+            const subjectName = subjects[id].pathParts ? subjects[id].pathParts[subjects[id].pathParts.length - 1] : subjects[id].name;
+            subjects[id].pathParts = [...selectedPath, subjectName];
+          }
+        });
+        StorageManager.saveSubjects(subjects);
+        this.selectedSubjects.clear();
+        this.isSelectMode = false;
+        this.renderSubjects();
+      });
+    });
+
+    // --- Custom Folder Creation ---
+    safeOn('btn-create-folder', 'click', () => {
+      const folderName = prompt('Nom du nouveau dossier :');
+      if (!folderName) return;
+      const folderIcon = prompt('Émoji / Icône pour ce dossier (ex: 📁, 📐) :', '📁') || '📁';
+      
+      const profile = StorageManager.getProfile();
+      if (!profile.customFolders) profile.customFolders = [];
+      profile.customFolders.push({
+        pathParts: [...this.currentFolderPath, folderName.trim()],
+        icon: folderIcon
+      });
+      StorageManager.saveProfile(profile);
+      this.renderSubjects();
+    });
 
     safeOn('header-cloud-btn', 'click', () => {
       const modal = document.getElementById('modal-cloud-login');
@@ -5639,6 +6336,128 @@ class AppController {
       this.renderShop();
     });
   }
+
+  buildFolderTree() {
+    const tree = { name: "Accueil", pathParts: [], children: {} };
+    const subjects = StorageManager.getSubjects();
+    const profile = StorageManager.getProfile();
+    
+    const addPathToTree = (pathParts) => {
+      let current = tree;
+      let currentPath = [];
+      for (const part of pathParts) {
+        currentPath.push(part);
+        if (!current.children[part]) {
+          current.children[part] = { name: part, pathParts: [...currentPath], children: {} };
+        }
+        current = current.children[part];
+      }
+    };
+
+    Object.values(subjects).forEach(sub => {
+      if (sub.pathParts && sub.pathParts.length > 1) {
+        addPathToTree(sub.pathParts.slice(0, -1));
+      }
+    });
+
+    if (profile.customFolders) {
+      profile.customFolders.forEach(cf => {
+        if (cf.pathParts) addPathToTree(cf.pathParts);
+      });
+    }
+
+    return tree;
+  }
+
+  openFolderSelector(callback, subjectName = null) {
+    const modal = document.getElementById('modal-folder-selector');
+    const treeContainer = document.getElementById('folder-selector-tree');
+    
+    let selectedPath = [];
+    const tree = this.buildFolderTree();
+
+    const renderNode = (node, depth = 0) => {
+      const el = document.createElement('div');
+      el.style.paddingLeft = `${depth * 1.5}rem`;
+      el.style.paddingTop = '0.5rem';
+      el.style.paddingBottom = '0.5rem';
+      el.style.cursor = 'pointer';
+      el.style.borderRadius = '4px';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.gap = '0.5rem';
+
+      const isSelected = JSON.stringify(node.pathParts) === JSON.stringify(selectedPath);
+      if (isSelected) {
+        el.style.backgroundColor = 'rgba(74, 222, 128, 0.2)';
+        el.style.border = '1px solid var(--accent-green)';
+      } else {
+        el.style.border = '1px solid transparent';
+      }
+
+      const icon = depth === 0 ? '🏠' : '📁';
+      el.innerHTML = `<span>${icon}</span><span>${node.name}</span>`;
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedPath = node.pathParts;
+        renderTree();
+      });
+
+      return el;
+    };
+
+    const renderTreeRecursive = (node, depth, container) => {
+      container.appendChild(renderNode(node, depth));
+      Object.values(node.children).forEach(child => {
+        renderTreeRecursive(child, depth + 1, container);
+      });
+    };
+
+    const renderTree = () => {
+      treeContainer.innerHTML = '';
+      renderTreeRecursive(tree, 0, treeContainer);
+    };
+
+    renderTree();
+
+    const handleConfirm = () => {
+      let finalPath = [...selectedPath];
+      if (subjectName) finalPath.push(subjectName);
+      callback(finalPath);
+      modal.classList.remove('active');
+    };
+
+    const handleNew = () => {
+      const folderName = prompt('Nom du nouveau sous-dossier dans ' + (selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : 'Accueil') + ' :');
+      if (folderName && folderName.trim() !== '') {
+        selectedPath.push(folderName.trim());
+        const profile = StorageManager.getProfile();
+        if (!profile.customFolders) profile.customFolders = [];
+        profile.customFolders.push({ pathParts: [...selectedPath], customIcon: '📁' });
+        StorageManager.saveProfile(profile);
+        
+        const newTree = this.buildFolderTree();
+        Object.assign(tree, newTree);
+        renderTree();
+      }
+    };
+
+    // Fix event listeners
+    const btnConfirmOld = document.getElementById('btn-folder-selector-confirm');
+    const btnNewOld = document.getElementById('btn-folder-selector-new');
+    
+    const btnConfirm = btnConfirmOld.cloneNode(true);
+    const btnNew = btnNewOld.cloneNode(true);
+    
+    btnConfirmOld.parentNode.replaceChild(btnConfirm, btnConfirmOld);
+    btnNewOld.parentNode.replaceChild(btnNew, btnNewOld);
+
+    btnConfirm.addEventListener('click', handleConfirm);
+    btnNew.addEventListener('click', handleNew);
+
+    modal.classList.add('active');
+  }
 }
 
 function startApp() {
@@ -5799,7 +6618,11 @@ function startApp() {
       });
 
       // Refresh views without re-running init (avoids duplicate listeners)
-      app.switchView('home-view');
+      app.switchView('subjects-view');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      const activeNav = document.querySelector('.nav-btn[data-target="subjects-view"]');
+      if (activeNav) activeNav.classList.add('active');
+      
       app.applyUserTheme();
       app.renderSubjects();
       app.renderShop();

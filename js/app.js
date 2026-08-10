@@ -883,6 +883,31 @@ class AppController {
       this.renderDeckCard(container, sub);
     });
 
+    if (sortedFolders.length === 0 && sortedDecks.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.style.cssText = 'grid-column: 1/-1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem 1.5rem; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: var(--radius-lg); margin-top: 1rem;';
+      emptyState.innerHTML = `
+        <span style="font-size: 3rem; margin-bottom: 1rem;">📭</span>
+        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: white;">Aucun cours disponible</h3>
+        <p style="color: var(--text-secondary); max-width: 400px; margin-bottom: 1.5rem; font-size: 0.95rem;">
+          Vous n'avez pas encore importé de cours. Vous pouvez en importer gratuitement depuis la communauté ou importer vos propres fichiers CSV !
+        </p>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center;">
+          <button id="btn-empty-goto-community" class="btn-primary" style="font-size: 0.9rem; padding: 0.6rem 1.2rem;">🌐 Découvrir la Communauté</button>
+          <button id="btn-empty-goto-import" class="btn-secondary" style="font-size: 0.9rem; padding: 0.6rem 1.2rem;">📥 Importer un fichier</button>
+        </div>
+      `;
+      
+      emptyState.querySelector('#btn-empty-goto-community').addEventListener('click', () => {
+        this.switchView('community-view');
+      });
+      emptyState.querySelector('#btn-empty-goto-import').addEventListener('click', () => {
+        this.switchView('csv-view');
+      });
+      
+      container.appendChild(emptyState);
+    }
+
     this.triggerMathJax();
   }
 
@@ -931,6 +956,7 @@ class AppController {
           <button class="btn-secondary btn-icon-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Changer l'icône">🎨</button>
           <button class="btn-secondary btn-rename-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Renommer">✏️</button>
           <button class="btn-secondary btn-organize-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Déplacer vers un dossier">⚙️ Organiser</button>
+          <button class="btn-secondary btn-share-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem;" title="Partager à la communauté">🌐</button>
           <button class="btn-secondary btn-delete-deck" data-sub="${sub.id}" style="padding: 0.4rem 0.5rem; font-size: 0.8rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Supprimer ce paquet">🗑️</button>
           <button class="btn-primary btn-start-quiz" data-sub="${sub.id}">Quiz ➔</button>
         </div>
@@ -960,6 +986,14 @@ class AppController {
         this.renderSubjects();
       }
     });
+
+    const btnShareDeck = card.querySelector('.btn-share-deck');
+    if (btnShareDeck) {
+      btnShareDeck.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.shareDeckToCommunity(sub.id);
+      });
+    }
 
     const btnRenameDeck = card.querySelector('.btn-rename-deck');
     if (btnRenameDeck) {
@@ -1046,6 +1080,40 @@ class AppController {
       if (btn) { btn.textContent = '✅'; btn.disabled = true; }
     } else {
       alert('Erreur lors de la soumission du dossier.');
+      if (btn) btn.textContent = '🌐';
+    }
+  }
+
+  async shareDeckToCommunity(subjectId) {
+    const subjects = StorageManager.getSubjects();
+    const sub = subjects[subjectId];
+    if (!sub) return;
+
+    const profile = StorageManager.getProfile();
+    const author = profile.cloudAccount?.username || profile.name || 'Joueur Anonyme';
+    const cleanName = (sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name).replace(/\[CSV\]/g, '').trim();
+
+    if (!confirm(`Partager le cours "${cleanName}" (${sub.questions ? sub.questions.length : 0} questions) à la communauté ?`)) return;
+
+    const category = prompt(`Catégorie pour "${cleanName}" :`, sub.category || 'Général') || 'Général';
+    
+    // Check total size
+    const jsonStr = JSON.stringify(sub.questions || []);
+    if (jsonStr.length > 5000000) {
+      alert("Le cours est trop volumineux pour être partagé (max ~5MB).");
+      return;
+    }
+
+    const btn = document.querySelector(`.btn-share-deck[data-sub="${subjectId}"]`);
+    if (btn) btn.textContent = '⏳...';
+
+    const success = await submitCommunitySubject(cleanName, author, category, sub.questions || []);
+    
+    if (success) {
+      alert('Cours soumis à la communauté avec succès ! Il sera disponible après validation.');
+      if (btn) { btn.textContent = '✅'; btn.disabled = true; }
+    } else {
+      alert('Erreur lors de la soumission du cours.');
       if (btn) btn.textContent = '🌐';
     }
   }
@@ -2422,6 +2490,26 @@ class AppController {
     document.getElementById('prof-name').textContent = profile.name || 'Réviseur Pro';
     document.getElementById('prof-title').textContent = GamificationEngine.getLevelTitle(profile.level);
     document.getElementById('prof-level-info').textContent = `Niveau ${profile.level} (${profile.xp} / ${GamificationEngine.getRequiredXP(profile.level)} XP)`;
+
+    const equippedBadgesContainer = document.getElementById('prof-equipped-badges');
+    if (equippedBadgesContainer) {
+      equippedBadgesContainer.innerHTML = '';
+      const selected = profile.selectedBadges || [];
+      if (selected.length > 0) {
+        selected.forEach(achId => {
+          const ach = ACHIEVEMENTS.find(a => a.id === achId);
+          if (ach) {
+            const badgeEl = document.createElement('div');
+            badgeEl.className = 'level-badge';
+            badgeEl.style.cssText = 'background: rgba(139, 92, 246, 0.15); border: 1px solid var(--accent-purple); color: white; display: flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.65rem; font-size: 0.80rem; font-weight: 600; border-radius: var(--radius-full);';
+            badgeEl.innerHTML = `<span>${ach.icon}</span> <span>${ach.title}</span>`;
+            equippedBadgesContainer.appendChild(badgeEl);
+          }
+        });
+      } else {
+        equippedBadgesContainer.innerHTML = `<span style="font-size: 0.8rem; color: var(--text-secondary); font-style: italic;">Aucun badge affiché. Cliquez sur "Afficher sur le profil" ci-dessous pour en équiper !</span>`;
+      }
+    }
 
     const cloudStatus = document.getElementById('cloud-sync-status');
     if (cloudStatus && profile.cloudAccount) {
