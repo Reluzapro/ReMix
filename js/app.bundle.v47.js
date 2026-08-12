@@ -4317,7 +4317,7 @@ class AppController {
           card.classList.add('disabled');
         }
 
-        card.innerHTML = `<span>${opt}</span><span class="opt-check"></span>`;
+        card.innerHTML = `<div class="option-card-content"><span class="opt-text">${opt}</span></div><span class="opt-check"></span>`;
         card.addEventListener('click', () => {
           if (card.classList.contains('disabled') || card.classList.contains('selected') || card.classList.contains('answered')) return;
           this.handleAnswerSelection(card, opt);
@@ -4369,21 +4369,21 @@ class AppController {
         const checkEl = targetCard.querySelector('.opt-check');
         if (checkEl) checkEl.textContent = '❌';
 
-        // Append explicit red wrong text inside card
-        if (!targetCard.querySelector('.wrong-tag')) {
+        // Append explicit red wrong text inside card content
+        const contentEl = targetCard.querySelector('.option-card-content');
+        if (contentEl && !contentEl.querySelector('.wrong-tag')) {
           const tag = document.createElement('div');
           tag.className = 'wrong-tag';
           tag.style.cssText = 'color: #fca5a5; font-size: 0.85rem; font-weight: 700; margin-top: 0.35rem;';
           tag.textContent = '❌ Votre réponse (Incorrecte -5 pts)';
-          targetCard.appendChild(tag);
+          contentEl.appendChild(tag);
         }
       }
 
       // Highlight exact correct answer in vibrant green
       allCards.forEach(c => {
         const optVal = c.getAttribute('data-option');
-        const textVal = c.querySelector('span')?.textContent || c.textContent;
-        if (optVal === result.correctAnswer || textVal.trim().includes(result.correctAnswer.trim()) || result.correctAnswer.trim().includes(textVal.trim())) {
+        if (optVal === result.correctAnswer) {
           c.classList.add('correct');
           c.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
           c.style.setProperty('border', '3px solid #10b981', 'important');
@@ -4392,12 +4392,13 @@ class AppController {
           const checkEl = c.querySelector('.opt-check');
           if (checkEl) checkEl.textContent = '✓';
 
-          if (!c.querySelector('.correct-tag')) {
+          const contentEl = c.querySelector('.option-card-content');
+          if (contentEl && !contentEl.querySelector('.correct-tag')) {
             const tag = document.createElement('div');
             tag.className = 'correct-tag';
             tag.style.cssText = 'color: #6ee7b7; font-size: 0.85rem; font-weight: 700; margin-top: 0.35rem;';
             tag.textContent = '✅ Bonne réponse';
-            c.appendChild(tag);
+            contentEl.appendChild(tag);
           }
         }
       });
