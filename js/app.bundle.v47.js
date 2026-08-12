@@ -2825,6 +2825,16 @@ const safeOn = (id, event, fn) => {
   if (el) el.addEventListener(event, fn);
 };
 
+const escapeHTML = (str) => {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 
 class AppController {
   constructor() {
@@ -4305,7 +4315,7 @@ class AppController {
     }
 
     const questionTextEl = document.getElementById('quiz-question-text');
-    if (questionTextEl) questionTextEl.innerHTML = question.question;
+    if (questionTextEl) questionTextEl.innerHTML = escapeHTML(question.question);
 
     if (optionsContainer) {
       optionsContainer.innerHTML = '';
@@ -4317,7 +4327,7 @@ class AppController {
           card.classList.add('disabled');
         }
 
-        card.innerHTML = `<div class="option-card-content"><span class="opt-text">${opt}</span></div><span class="opt-check"></span>`;
+        card.innerHTML = `<div class="option-card-content"><span class="opt-text">${escapeHTML(opt)}</span></div><span class="opt-check"></span>`;
         card.addEventListener('click', () => {
           if (card.classList.contains('disabled') || card.classList.contains('selected') || card.classList.contains('answered')) return;
           this.handleAnswerSelection(card, opt);
@@ -4415,7 +4425,7 @@ class AppController {
     const expText = document.getElementById('quiz-explanation-text');
     if (expBox && expText) {
       if (result.explanation && result.explanation.trim()) {
-        expText.innerHTML = result.explanation;
+        expText.innerHTML = escapeHTML(result.explanation);
         expBox.style.setProperty('display', 'block', 'important');
         expBox.style.setProperty('visibility', 'visible', 'important');
         expBox.style.setProperty('opacity', '1', 'important');
