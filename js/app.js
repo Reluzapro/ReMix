@@ -1462,10 +1462,12 @@ class AppController {
     const nextBtn = document.getElementById('quiz-next-btn');
     const saveExitBtn = document.getElementById('quiz-save-exit-btn');
     const expBox = document.getElementById('quiz-explanation-box');
+    const dismissBtn = document.getElementById('quiz-dismiss-card-btn');
 
     if (nextBtn) nextBtn.style.display = 'none';
     if (saveExitBtn) saveExitBtn.style.display = 'none';
     if (expBox) expBox.style.display = 'none';
+    if (dismissBtn) dismissBtn.style.display = 'none';
 
     const counter = document.getElementById('quiz-counter');
     if (counter) counter.textContent = `Question ${question.currentIndex + 1}`;
@@ -1627,6 +1629,24 @@ class AppController {
     if (nextBtn) {
       nextBtn.style.display = 'inline-block';
       nextBtn.onclick = () => {
+        if (result.isFinished) {
+          this.showResults(result.summary);
+        } else {
+          this.renderCurrentQuestion(result.nextQuestion);
+          this.startTimer();
+        }
+      };
+    }
+
+    const dismissBtn = document.getElementById('quiz-dismiss-card-btn');
+    if (dismissBtn) {
+      dismissBtn.style.display = 'inline-block';
+      dismissBtn.onclick = () => {
+        const currentSession = this.quizEngine.currentSession;
+        const currentQ = currentSession?.questions?.[currentSession.currentIndex - 1];
+        if (currentQ) {
+          StorageManager.dismissCard(currentQ.id, currentQ.question);
+        }
         if (result.isFinished) {
           this.showResults(result.summary);
         } else {

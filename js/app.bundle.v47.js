@@ -957,6 +957,34 @@ class StorageManager {
     return cardData;
   }
 
+  static dismissCard(cardId, questionText) {
+    if (!cardId && !questionText) return;
+    const allSRS = this.getSRSData();
+    const now = Date.now();
+    
+    // Set SRS interval to 10 years (3650 days) and 100% mastery so it never reappears in reviews
+    if (cardId) {
+      allSRS[cardId] = {
+        reps: 99,
+        intervalDays: 3650,
+        easeFactor: 3.0,
+        baseMastery: 1.0,
+        lastReviewed: now,
+        nextDue: now + (3650 * 24 * 60 * 60 * 1000),
+        dismissed: true
+      };
+      try {
+        localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(allSRS));
+      } catch (e) {}
+    }
+
+    if (questionText) {
+      this.removeRevisionItem(questionText);
+    }
+    
+    this.autoSyncCloud();
+  }
+
   static getEffectiveCardMastery(cardSRS) {
     if (!cardSRS || !cardSRS.lastReviewed) return 0.0;
     const now = Date.now();
@@ -4275,10 +4303,12 @@ class AppController {
     const nextBtn = document.getElementById('quiz-next-btn');
     const saveExitBtn = document.getElementById('quiz-save-exit-btn');
     const expBox = document.getElementById('quiz-explanation-box');
+    const dismissBtn = document.getElementById('quiz-dismiss-card-btn');
 
     if (nextBtn) nextBtn.style.display = 'none';
     if (saveExitBtn) saveExitBtn.style.display = 'none';
     if (expBox) expBox.style.display = 'none';
+    if (dismissBtn) dismissBtn.style.display = 'none';
 
     const counter = document.getElementById('quiz-counter');
     if (counter) counter.textContent = `Question ${question.currentIndex + 1}`;
@@ -4440,6 +4470,24 @@ class AppController {
     if (nextBtn) {
       nextBtn.style.display = 'inline-block';
       nextBtn.onclick = () => {
+        if (result.isFinished) {
+          this.showResults(result.summary);
+        } else {
+          this.renderCurrentQuestion(result.nextQuestion);
+          this.startTimer();
+        }
+      };
+    }
+
+    const dismissBtn = document.getElementById('quiz-dismiss-card-btn');
+    if (dismissBtn) {
+      dismissBtn.style.display = 'inline-block';
+      dismissBtn.onclick = () => {
+        const currentSession = this.quizEngine.currentSession;
+        const currentQ = currentSession?.questions?.[currentSession.currentIndex - 1];
+        if (currentQ) {
+          StorageManager.dismissCard(currentQ.id, currentQ.question);
+        }
         if (result.isFinished) {
           this.showResults(result.summary);
         } else {

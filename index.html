@@ -422,9 +422,16 @@
           <div id="quiz-explanation-text" style="font-size: 0.95rem; color: var(--text-primary); line-height: 1.5; white-space: pre-line;"></div>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem;">
-          <button class="btn btn-secondary" id="quiz-save-exit-btn" style="padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 600; border-radius: var(--radius-md);">💾 Sauvegarder & Quitter</button>
-          <button class="btn-primary" id="quiz-next-btn" style="display: none;">Suivant ➔</button>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" id="quiz-save-exit-btn" style="padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 600; border-radius: var(--radius-md);">💾 Sauvegarder & Quitter</button>
+            <button class="btn-primary" id="quiz-next-btn" style="display: none; padding: 0.75rem 1.75rem; font-size: 1rem;">Suivant ➔</button>
+          </div>
+          <div style="text-align: right;">
+            <button id="quiz-dismiss-card-btn" style="display: none; background: none; border: none; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; text-decoration: underline; padding: 0.25rem 0.5rem; transition: color 0.2s;" onmouseover="this.style.color='var(--accent-green)'" onmouseout="this.style.color='var(--text-secondary)'">
+              🎓 Je connais parfaitement cette carte (Ne plus revoir)
+            </button>
+          </div>
         </div>
       </div>
     </section>

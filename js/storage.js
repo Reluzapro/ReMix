@@ -288,6 +288,34 @@ export class StorageManager {
     return cardData;
   }
 
+  static dismissCard(cardId, questionText) {
+    if (!cardId && !questionText) return;
+    const allSRS = this.getSRSData();
+    const now = Date.now();
+    
+    // Set SRS interval to 10 years (3650 days) and 100% mastery so it never reappears in reviews
+    if (cardId) {
+      allSRS[cardId] = {
+        reps: 99,
+        intervalDays: 3650,
+        easeFactor: 3.0,
+        baseMastery: 1.0,
+        lastReviewed: now,
+        nextDue: now + (3650 * 24 * 60 * 60 * 1000),
+        dismissed: true
+      };
+      try {
+        localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(allSRS));
+      } catch (e) {}
+    }
+
+    if (questionText) {
+      this.removeRevisionItem(questionText);
+    }
+    
+    this.autoSyncCloud();
+  }
+
   static getEffectiveCardMastery(cardSRS) {
     if (!cardSRS || !cardSRS.lastReviewed) return 0.0;
     const now = Date.now();
