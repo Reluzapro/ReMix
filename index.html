@@ -626,6 +626,46 @@
       <div id="csv-result-box" style="display: none; margin-top: 2rem; background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-md);">
         <!-- Injected via JS -->
       </div>
+
+      <!-- AI Prompt Generation Helper -->
+      <div style="background: var(--bg-card); border: 1px solid var(--accent-cyan); border-radius: var(--radius-lg); padding: 1.75rem; margin-top: 2.5rem; text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <h3 style="font-family: var(--font-title); font-size: 1.15rem; color: var(--accent-cyan); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            🤖 Générer des QCM automatiquement avec une IA
+          </h3>
+          <button id="btn-copy-ai-prompt" class="btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.85rem; border-color: var(--accent-cyan); color: var(--accent-cyan);">
+            📋 Copier le Prompt
+          </button>
+        </div>
+        
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem; line-height: 1.5;">
+          Vous pouvez générer facilement des centaines de questions compatibles avec <strong>ReMix</strong> en collant ce prompt dans une IA (ChatGPT, Claude, Gemini, etc.) :
+        </p>
+
+        <div style="position: relative;">
+          <pre id="ai-prompt-content" style="background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; font-size: 0.85rem; color: #e2e8f0; line-height: 1.6; white-space: pre-wrap; word-break: break-word; font-family: monospace; user-select: all;">Génère uniquement un fichier CSV au format suivant, sans texte explicatif supplémentaire, sans balises Markdown, sans encodage HTML, et en utilisant le point-virgule (;) comme séparateur.
+Chaque ligne doit contenir exactement 6 colonnes :
+C1 = question
+C2 = bonne réponse
+C3 = mauvaise réponse 1
+C4 = mauvaise réponse 2
+C5 = mauvaise réponse 3
+C6 = explication ou justification
+Exemple de lignes :
+Définition d'un intervalle \(I\);\(x \in I \Rightarrow [[x,y] \subset I]\);\(x+y \in I\);\(\frac{x+y}{2} \notin I\);\(x < y \implies [x,y] \cap I = \emptyset\);Un intervalle est un ensemble convexe de réels.
+Valeur de \(\tan(\frac{\pi}{4})\);1;0;\(\sqrt{3}\);\(\frac{1}{\sqrt{3}}\);\(\tan(\frac{\pi}{4}) = \frac{\sin(\pi/4)}{\cos(\pi/4)} = 1\).
+Fais attention :
+ne mets pas de ligne d’en-tête,
+chaque ligne doit rester sur une seule ligne,
+n’utilise pas de guillemets autour des champs sauf si nécessaire,
+garde bien 6 colonnes par ligne,
+évite les retours à la ligne internes,
+les formules LaTeX peuvent rester entre \(...\).
+
+je veux des questions sur ..................</pre>
+        </div>
+        <div id="copy-ai-prompt-status" style="font-size: 0.8rem; color: var(--accent-green); margin-top: 0.5rem; display: none;">✓ Prompt copié dans le presse-papiers !</div>
+      </div>
     </section>
 
     <!-- 9. COMMUNITY SUBJECTS VIEW -->

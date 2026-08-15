@@ -3916,6 +3916,21 @@ function startApp() {
     const modal = document.getElementById('modal-legal-notice');
     if (modal) modal.classList.remove('active');
   });
+
+  safeOn('btn-copy-ai-prompt', 'click', () => {
+    const promptText = document.getElementById('ai-prompt-content')?.innerText || '';
+    if (promptText) {
+      navigator.clipboard.writeText(promptText).then(() => {
+        const status = document.getElementById('copy-ai-prompt-status');
+        if (status) {
+          status.style.display = 'block';
+          setTimeout(() => { status.style.display = 'none'; }, 3000);
+        }
+      }).catch(() => {
+        alert('Prompt copié !');
+      });
+    }
+  });
 }
 
 if (document.readyState === 'loading') {
