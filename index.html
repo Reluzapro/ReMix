@@ -589,6 +589,9 @@
             </svg>
             LinkedIn
           </a>
+          <button id="btn-profile-open-legal" class="btn-secondary" style="width: 100%; max-width: 300px; padding: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: var(--accent-cyan);">
+            ⚖️ Mentions Légales & Confidentialité (RGPD)
+          </button>
         </div>
       </div>
     </section>
@@ -645,6 +648,15 @@
       </div>
     </section>
 
+    <!-- Site Footer & Legal Links -->
+    <footer style="margin-top: 3rem; padding: 1.5rem 1rem; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-secondary); font-size: 0.85rem;">
+      <p style="margin-bottom: 0.5rem;">⚡ <strong>ReMix</strong> — Plateforme d'apprentissage & révision gamifiée.</p>
+      <div style="display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 0.5rem;">
+        <button id="btn-open-legal-modal" style="background: none; border: none; color: var(--accent-cyan); text-decoration: underline; font-size: 0.85rem; cursor: pointer; padding: 0.25rem 0.5rem;">⚖️ Mentions Légales & Confidentialité (RGPD)</button>
+        <span>•</span>
+        <span>Version 1.0</span>
+      </div>
+    </footer>
   </main>
 
   <!-- Modal Custom Reward -->
@@ -917,6 +929,68 @@
         <button class="btn-secondary" id="btn-folder-selector-new" style="flex: 1; padding: 0.8rem; font-size: 0.9rem;">+ Nouveau sous-dossier</button>
         <button class="btn-primary" id="btn-folder-selector-confirm" style="flex: 2; padding: 0.8rem; font-size: 0.9rem; background-color: var(--accent-green); border-color: var(--accent-green);">Valider le déplacement</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal Mentions Légales & Confidentialité (RGPD) -->
+  <div class="modal-overlay" id="modal-legal-notice" onclick="if(event.target===this) this.classList.remove('active')">
+    <div class="modal-card glass-panel" style="max-width: 650px; width: 95%; max-height: 85vh; overflow-y: auto; text-align: left; padding: 2rem 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <h2 style="font-size: 1.3rem; margin: 0; color: var(--accent-cyan);">⚖️ Mentions Légales & Confidentialité</h2>
+        <button class="btn-secondary" id="btn-close-legal-modal" style="padding: 0.4rem 0.8rem; border-radius: 50%;">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1.25rem; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary);">
+        
+        <div>
+          <h3 style="color: var(--accent-purple); font-size: 1.05rem; margin-bottom: 0.4rem;">1. Éditeur du site</h3>
+          <p style="color: var(--text-secondary);">
+            Le site <strong>ReMix</strong> est un projet personnel d'application éducative et de révision gamifiée développé par :<br>
+            <strong>Rémi Gaulue</strong><br>
+            Contact : <a href="mailto:eg0674228807@gmail.com" style="color: var(--accent-cyan);">eg0674228807@gmail.com</a>
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent-purple); font-size: 1.05rem; margin-bottom: 0.4rem;">2. Hébergement & Infrastructure</h3>
+          <p style="color: var(--text-secondary);">
+            <strong>Hébergement web :</strong> GitHub Pages / GitHub Inc., 88 Colin P Kelly Jr St, San Francisco, CA 94107, USA.<br>
+            <strong>Base de données & Authentification Cloud :</strong> Supabase Inc., 970 Toa Payoh North #07-04, Singapore 318992 (Serveurs région EU).
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent-purple); font-size: 1.05rem; margin-bottom: 0.4rem;">3. Données Personnelles & RGPD</h3>
+          <p style="color: var(--text-secondary);">
+            Conformément au Règlement Général sur la Protection des Données (RGPD) et à la loi Informatique et Libertés :
+          </p>
+          <ul style="color: var(--text-secondary); margin-left: 1.25rem; margin-top: 0.4rem;">
+            <li><strong>Données collectées :</strong> En cas de création d'un compte Cloud facultatif, nous enregistrons votre adresse email (identifiant), votre pseudonyme, votre mot de passe (chiffré de manière irréversible par Supabase), ainsi que votre progression de jeu (XP, pièces, statistiques de duels, paquets enregistrés).</li>
+            <li><strong>Finalité :</strong> La synchronisation multi-appareils (téléphone, ordinateur) et l'affichage des classements / listes d'amis.</li>
+            <li><strong>Durée de conservation :</strong> Les données sont conservées tant que votre compte est actif.</li>
+            <li><strong>Vos droits :</strong> Vous disposez d'un droit d'accès, de rectification et de <strong>suppression intégrale</strong> de vos données. Vous pouvez supprimer vos données à tout moment depuis les paramètres de l'application ou en envoyant un email à <a href="mailto:eg0674228807@gmail.com" style="color: var(--accent-cyan);">eg0674228807@gmail.com</a>.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent-purple); font-size: 1.05rem; margin-bottom: 0.4rem;">4. Cookies & Stockage Local (localStorage)</h3>
+          <p style="color: var(--text-secondary);">
+            Ce site <strong>n'utilise aucun traceur publicitaire ni cookie tiers de pistage</strong>.<br>
+            Le stockage local de votre navigateur (<code>localStorage</code>) est exclusivement utilisé pour des raisons techniques indispensables au fonctionnement du jeu : mémorisation de votre progression locale, de vos erreurs de révision, de vos cours importés et de votre thème graphique.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="color: var(--accent-purple); font-size: 1.05rem; margin-bottom: 0.4rem;">5. Propriété Intellectuelle & Partage Communautaire</h3>
+          <p style="color: var(--text-secondary);">
+            Les utilisateurs qui soumettent des paquets de questions à la communauté garantissent être titulaires des droits ou disposer de l'autorisation de diffuser le contenu pédagogique associé.<br>
+            Si vous constatez la présence d'un contenu portant atteinte à des droits d'auteur, vous pouvez demander son retrait immédiat en écrivant à <a href="mailto:eg0674228807@gmail.com" style="color: var(--accent-cyan);">eg0674228807@gmail.com</a>.
+          </p>
+        </div>
+
+      </div>
+
+      <button class="btn-primary" style="width: 100%; margin-top: 1.5rem;" onclick="document.getElementById('modal-legal-notice').classList.remove('active');">Compris & Fermer</button>
     </div>
   </div>
 

@@ -6694,6 +6694,21 @@ function startApp() {
     const modal = document.getElementById('modal-cloud-login');
     if (modal) modal.classList.add('active');
   });
+
+  safeOn('btn-open-legal-modal', 'click', () => {
+    const modal = document.getElementById('modal-legal-notice');
+    if (modal) modal.classList.add('active');
+  });
+
+  safeOn('btn-profile-open-legal', 'click', () => {
+    const modal = document.getElementById('modal-legal-notice');
+    if (modal) modal.classList.add('active');
+  });
+
+  safeOn('btn-close-legal-modal', 'click', () => {
+    const modal = document.getElementById('modal-legal-notice');
+    if (modal) modal.classList.remove('active');
+  });
 }
 
 if (document.readyState === 'loading') {
