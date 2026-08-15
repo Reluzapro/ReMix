@@ -422,7 +422,6 @@ export class StorageManager {
       if (str) optimizedSubjectsToPush = JSON.parse(str);
     } catch(e) {}
 
-    const cloudKey = `remix_cloud_db_${username}_${hashedKey}`;
     const payload = {
       profile,
       srs: this.getSRSData(),
@@ -431,7 +430,6 @@ export class StorageManager {
       revisionItems: this.getRevisionItems(),
       updatedAt: Date.now()
     };
-    try { localStorage.setItem(cloudKey, JSON.stringify(payload)); } catch (e) {}
     
     pushProfileToCloud(
       username,
@@ -635,13 +633,52 @@ export class StorageManager {
       this.autoSyncCloud();
       return;
     }
-    sessionData.savedAt = Date.now();
-    localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(sessionData));
+    
+    // Create an ultra-compact version of the session (no duplicate pools, minimal footprint)
+    const compactSession = {
+      subjectId: sessionData.subjectId,
+      mode: sessionData.mode,
+      currentIndex: sessionData.currentIndex || 0,
+      score: sessionData.score || 0,
+      correctCount: sessionData.correctCount || 0,
+      wrongCount: sessionData.wrongCount || 0,
+      skippedCount: sessionData.skippedCount || 0,
+      sessionTimer: sessionData.sessionTimer || 180,
+      streak: sessionData.streak || 0,
+      multiplier: sessionData.multiplier || 1,
+      powerupDoubleActive: !!sessionData.powerupDoubleActive,
+      disabledOptions: sessionData.disabledOptions || [],
+      history: sessionData.history || [],
+      savedAt: Date.now(),
+      // Only keep the remaining/prepared questions array, without extra bloat
+      questions: (sessionData.questions || []).map(q => ({
+        id: q.id,
+        question: q.question,
+        options: q.options || [],
+        correct: q.correct,
+        explanation: q.explanation || '',
+        shuffledOptions: q.shuffledOptions || q.options || []
+      }))
+    };
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(compactSession));
+    } catch (e) {
+      console.warn('Quota exceeded when saving paused session to localStorage, attempting fallback:', e);
+      try {
+        // Fallback: try clearing legacy keys if any
+        sessionStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(compactSession));
+      } catch (err) {}
+    }
     this.autoSyncCloud();
   }
 
   static getPausedSession() {
-    const data = localStorage.getItem(STORAGE_KEYS.PAUSED_SESSION);
+    let data = null;
+    try {
+      data = localStorage.getItem(STORAGE_KEYS.PAUSED_SESSION);
+      if (!data) data = sessionStorage.getItem(STORAGE_KEYS.PAUSED_SESSION);
+    } catch (e) {}
     if (!data) return null;
     try {
       return JSON.parse(data);
@@ -651,7 +688,10 @@ export class StorageManager {
   }
 
   static clearPausedSession() {
-    localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+      sessionStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
+    } catch (e) {}
     const profile = this.getProfile();
     profile.pausedSessionClearedAt = Date.now();
     this.saveProfile(profile);

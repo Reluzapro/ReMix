@@ -44,7 +44,6 @@ export class QuizEngine {
     this.currentSession = {
       subjectId: subjectId,
       mode: mode,
-      originalQuestions: [...questions],
       questions: prepared,
       currentIndex: 0,
       score: 0,
@@ -84,7 +83,8 @@ export class QuizEngine {
     // Loop/extend pool if questions run low before 3-minute timer ends
     if (this.currentSession.currentIndex >= this.currentSession.questions.length) {
       if (this.currentSession.mode === 'infinite') {
-        const pool = this.currentSession.originalQuestions || [];
+        const subjects = StorageManager.getSubjects();
+        const pool = subjects[this.currentSession.subjectId]?.questions || [];
         if (pool.length > 0) {
           const extra = [...pool].sort(() => Math.random() - 0.5).map(q => this.prepareQuestion(q));
           this.currentSession.questions.push(...extra);
