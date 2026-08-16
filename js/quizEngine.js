@@ -34,9 +34,6 @@ export class QuizEngine {
       });
 
       finalQuestions = sortedQuestions;
-      if (mode === 'classic') {
-        finalQuestions = sortedQuestions.slice(0, 10);
-      }
     }
 
     const prepared = finalQuestions.map(q => this.prepareQuestion(q));
@@ -82,7 +79,7 @@ export class QuizEngine {
 
     // Loop/extend pool if questions run low before 3-minute timer ends
     if (this.currentSession.currentIndex >= this.currentSession.questions.length) {
-      if (this.currentSession.mode === 'infinite') {
+      if (this.currentSession.mode !== 'revision') {
         const subjects = StorageManager.getSubjects();
         const pool = subjects[this.currentSession.subjectId]?.questions || [];
         if (pool.length > 0) {
@@ -92,7 +89,7 @@ export class QuizEngine {
           return null;
         }
       } else {
-        return null; // End of questions for non-infinite modes
+        return null; // End of revision items
       }
     }
 

@@ -1997,25 +1997,60 @@ class AppController {
     // Visual feedback (correct/wrong) — quick, no explanation
     if (result.wasCorrect) {
       if (targetCard) {
+        targetCard.classList.add('correct');
         targetCard.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
         targetCard.style.setProperty('border', '3px solid #10b981', 'important');
+        targetCard.style.setProperty('box-shadow', '0 0 25px rgba(16, 185, 129, 0.7)', 'important');
+        targetCard.style.setProperty('color', '#ffffff', 'important');
+        const checkEl = targetCard.querySelector('.opt-check');
+        if (checkEl) checkEl.textContent = '✓';
       }
       SoundFX.playCorrect();
     } else {
       if (targetCard) {
+        targetCard.classList.add('wrong');
         targetCard.style.setProperty('background-color', 'rgba(239, 68, 68, 0.5)', 'important');
         targetCard.style.setProperty('border', '3px solid #ef4444', 'important');
+        targetCard.style.setProperty('box-shadow', '0 0 25px rgba(239, 68, 68, 0.8)', 'important');
+        targetCard.style.setProperty('color', '#ffffff', 'important');
+        const checkEl = targetCard.querySelector('.opt-check');
+        if (checkEl) checkEl.textContent = '❌';
+
+        const contentEl = targetCard.querySelector('.option-card-content');
+        if (contentEl && !contentEl.querySelector('.wrong-tag')) {
+          const tag = document.createElement('div');
+          tag.className = 'wrong-tag';
+          tag.style.cssText = 'color: #fca5a5; font-size: 0.85rem; font-weight: 700; margin-top: 0.35rem;';
+          tag.textContent = '❌ Votre réponse (Incorrecte -5 pts)';
+          contentEl.appendChild(tag);
+        }
       }
       SoundFX.playWrong();
 
       // Show correct answer
       allCards.forEach(c => {
         if (c.getAttribute('data-option') === result.correctAnswer) {
+          c.classList.add('correct');
           c.style.setProperty('background-color', 'rgba(16, 185, 129, 0.4)', 'important');
           c.style.setProperty('border', '3px solid #10b981', 'important');
+          c.style.setProperty('box-shadow', '0 0 25px rgba(16, 185, 129, 0.7)', 'important');
+          c.style.setProperty('color', '#ffffff', 'important');
+          const checkEl = c.querySelector('.opt-check');
+          if (checkEl) checkEl.textContent = '✓';
+
+          const contentEl = c.querySelector('.option-card-content');
+          if (contentEl && !contentEl.querySelector('.correct-tag')) {
+            const tag = document.createElement('div');
+            tag.className = 'correct-tag';
+            tag.style.cssText = 'color: #6ee7b7; font-size: 0.85rem; font-weight: 700; margin-top: 0.35rem;';
+            tag.textContent = '✅ Bonne réponse';
+            contentEl.appendChild(tag);
+          }
         }
       });
     }
+
+    this.triggerMathJax();
 
     // Update duel score
     this.duelState.myScore = this.quizEngine.currentSession?.score || 0;
@@ -2039,7 +2074,7 @@ class AppController {
     setTimeout(() => {
       if (!this.duelState) return;
 
-      if (result.isFinished || this.duelState.questionIndex >= this.duelState.questions.length) {
+      if (result.isFinished) {
         this.endDuel();
       } else {
         const nextQ = this.quizEngine.getCurrentQuestion();
