@@ -2937,6 +2937,7 @@ class AppController {
           const newSubject = {
             id: `sub_${Date.now()}_${Math.floor(Math.random()*1000)}`,
             name: name,
+            originalFileName: file.name,
             pathParts: [...this.currentFolderPath, ...relativeFolders, name],
             icon: '📄',
             category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',

@@ -851,15 +851,29 @@ class StorageManager {
       .trim();
 
     const targetNorm = norm(subject.name);
+    const targetFileNorm = norm(subject.originalFileName);
 
-    // Find existing subject by ID or by normalized name match
+    // Find existing subject by ID, by exact/normalized name, or by original file name if renamed!
     if (subject.id && subjects[subject.id]) {
       targetSubjectId = subject.id;
-    } else if (targetNorm) {
+    } else {
       const existingKey = Object.keys(subjects).find(k => {
         const existingSub = subjects[k];
         if (!existingSub) return false;
-        return norm(existingSub.name) === targetNorm || norm(k) === targetNorm;
+        
+        // 1. Direct name match
+        if (targetNorm && (norm(existingSub.name) === targetNorm || norm(k) === targetNorm)) return true;
+        
+        // 2. Match by originalFileName (e.g. if the user renamed the deck in the UI)
+        if (targetFileNorm && existingSub.originalFileName && norm(existingSub.originalFileName) === targetFileNorm) return true;
+
+        // 3. Match from description (e.g. "Importé depuis chapitre 8.csv")
+        if (targetFileNorm && existingSub.description && norm(existingSub.description).includes(targetFileNorm)) return true;
+
+        // 4. Match from subject.name against originalFileName
+        if (targetNorm && existingSub.originalFileName && norm(existingSub.originalFileName) === targetNorm) return true;
+
+        return false;
       });
       if (existingKey) {
         targetSubjectId = existingKey;
@@ -894,11 +908,10 @@ class StorageManager {
         };
       });
 
-      // Update subject in place preserving custom icon/verified flags/ID
+      // Update subject in place preserving custom user name, custom icon, folders/pathParts, and verified flags
       subjects[targetSubjectId] = {
         ...existingSub,
-        ...subject,
-        id: targetSubjectId,
+        originalFileName: subject.originalFileName || existingSub.originalFileName || subject.name,
         questions: updatedQuestions
       };
       this.saveSubjects(subjects);
@@ -5891,6 +5904,7 @@ class AppController {
           const newSubject = {
             id: `sub_${Date.now()}_${Math.floor(Math.random()*1000)}`,
             name: name,
+            originalFileName: file.name,
             pathParts: [...this.currentFolderPath, ...relativeFolders, name],
             icon: '📄',
             category: res.isAnkiDeck ? 'Paquet Anki' : 'Mes Cours',
