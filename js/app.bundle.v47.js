@@ -859,29 +859,27 @@ class StorageManager {
       const existingSub = subjects[targetSubjectId];
       const oldQuestions = existingSub.questions || [];
       
-      // Build lookup map of old questions by question text and by ID
-      const oldByQuestion = new Map();
+      // Build lookup map of old questions by ID and by index
       const oldById = new Map();
-      oldQuestions.forEach(q => {
-        if (q.question) oldByQuestion.set(q.question.trim().toLowerCase(), q);
+      const oldByQuestion = new Map();
+      oldQuestions.forEach((q, idx) => {
         if (q.id) oldById.set(q.id, q);
+        if (q.question) oldByQuestion.set(q.question.trim().toLowerCase(), q);
       });
 
-      // Map new questions to preserve old IDs and SRS progress
+      // Update question list with the new content while mapping IDs to preserve SRS
       const updatedQuestions = (subject.questions || []).map((newQ, idx) => {
         const qKey = newQ.question ? newQ.question.trim().toLowerCase() : '';
-        const matchedOld = oldByQuestion.get(qKey) || (newQ.id ? oldById.get(newQ.id) : null);
+        // 1. Try matching by question text
+        // 2. Try matching by explicit ID
+        // 3. Fallback: match by position index if total count is similar
+        const matchedOld = oldByQuestion.get(qKey) || (newQ.id ? oldById.get(newQ.id) : null) || oldQuestions[idx];
         
-        if (matchedOld && matchedOld.id) {
-          // Preserve the original ID so existing SRS / Anki repetition records remain active
-          return {
-            ...newQ,
-            id: matchedOld.id
-          };
-        }
+        const persistentId = (matchedOld && matchedOld.id) ? matchedOld.id : (newQ.id || `q_${Date.now()}_${idx}`);
+
         return {
           ...newQ,
-          id: newQ.id || `q_${Date.now()}_${idx}`
+          id: persistentId
         };
       });
 

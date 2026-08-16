@@ -6,12 +6,20 @@
   <title>ReMix - Jeu de Révision Gamifié</title>
   <meta name="description" content="Révisez vos cours et paquets Anki avec ReMix, l'application de révision gamifiée complète avec MathJax, duels 1v1 en ligne, compte cloud et répétition espacée !">
   <meta name="theme-color" content="#0b0f19">
+  
+  <!-- Favicon (SVG Emoji⚡) to prevent 404 error -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+
+  <!-- Preconnect to CDNs for blazing fast first load -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+
   <link rel="stylesheet" href="style.css?v=mobile1">
 
   <!-- Supabase Cloud Database -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <!-- PeerJS for Real-time Cross-Network WebRTC Duels -->
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script defer src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
   <!-- MathJax Config & Library -->
   <script>
