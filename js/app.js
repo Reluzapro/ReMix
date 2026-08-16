@@ -2909,6 +2909,9 @@ class AppController {
     let successCount = 0;
     let errorCount = 0;
     
+    const importMode = document.querySelector('input[name="csv-import-mode"]:checked')?.value || 'update';
+    let updatedCount = 0;
+
     for (const file of files) {
       try {
         const text = await new Promise((resolve, reject) => {
@@ -2942,7 +2945,12 @@ class AppController {
             questions: res.questions
           };
 
-          StorageManager.addSubject(newSubject);
+          if (importMode === 'update') {
+            const upsertRes = StorageManager.upsertSubjectWithProgress(newSubject);
+            if (upsertRes.updated) updatedCount++;
+          } else {
+            StorageManager.addSubject(newSubject);
+          }
           successCount++;
         } else {
           errorCount++;
@@ -2959,7 +2967,7 @@ class AppController {
 
     resultBox.innerHTML = `
       <h4 style="color: var(--accent-green); margin-bottom: 0.5rem;">✅ Importation terminée</h4>
-      <p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${successCount}</strong> fichier(s) importé(s) avec succès.</p>
+      <p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${successCount}</strong> fichier(s) traité(s) avec succès ${updatedCount > 0 ? `(dont <strong>${updatedCount}</strong> paquet(s) mis à jour avec conservation des scores)` : ''}.</p>
       ${errorCount > 0 ? `<p style="color: var(--accent-red);">❌ <strong>${errorCount}</strong> fichier(s) ont échoué.</p>` : ''}
     `;
   }
@@ -2978,6 +2986,8 @@ class AppController {
         const subjectName = prompt('Nom de la matière pour ce paquet :', defaultName);
         if (!subjectName) return;
 
+        const importMode = document.querySelector('input[name="csv-import-mode"]:checked')?.value || 'update';
+
         const newSubject = {
           id: `custom_sub_${Date.now()}`,
           name: subjectName,
@@ -2991,10 +3001,17 @@ class AppController {
           questions: res.questions
         };
 
-        StorageManager.addSubject(newSubject);
+        let isUpdated = false;
+        if (importMode === 'update') {
+          const upsertRes = StorageManager.upsertSubjectWithProgress(newSubject);
+          isUpdated = upsertRes.updated;
+        } else {
+          StorageManager.addSubject(newSubject);
+        }
+
         resultBox.innerHTML = `
-          <h4 style="color: var(--accent-green);">✅ Importation réussie !</h4>
-          <p>${res.count} cartes/questions ajoutées avec succès à la matière "${subjectName}".</p>
+          <h4 style="color: var(--accent-green);">✅ ${isUpdated ? 'Mise à jour réussie !' : 'Importation réussie !'}</h4>
+          <p>${isUpdated ? `Le paquet "${subjectName}" a été mis à jour (${res.count} questions). Vos scores et votre progression SRS ont été précieusement conservés !` : `${res.count} cartes/questions ajoutées avec succès à la matière "${subjectName}".`}</p>
           <button id="btn-submit-community" class="btn-primary" style="margin-top: 1rem; width: 100%; font-size: 0.9rem;">
             🌐 Soumettre à la communauté
           </button>

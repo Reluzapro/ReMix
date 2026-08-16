@@ -169,6 +169,70 @@ export class StorageManager {
     return subjects;
   }
 
+  static upsertSubjectWithProgress(subject) {
+    const subjects = this.getSubjects();
+    const allSRS = this.getSRSData();
+    let targetSubjectId = null;
+
+    // Find existing subject by ID or by exact name match (case-insensitive)
+    if (subjects[subject.id]) {
+      targetSubjectId = subject.id;
+    } else {
+      const existingKey = Object.keys(subjects).find(k => 
+        (subjects[k].name && subject.name && subjects[k].name.trim().toLowerCase() === subject.name.trim().toLowerCase())
+      );
+      if (existingKey) {
+        targetSubjectId = existingKey;
+      }
+    }
+
+    if (targetSubjectId && subjects[targetSubjectId]) {
+      const existingSub = subjects[targetSubjectId];
+      const oldQuestions = existingSub.questions || [];
+      
+      // Build lookup map of old questions by question text and by ID
+      const oldByQuestion = new Map();
+      const oldById = new Map();
+      oldQuestions.forEach(q => {
+        if (q.question) oldByQuestion.set(q.question.trim().toLowerCase(), q);
+        if (q.id) oldById.set(q.id, q);
+      });
+
+      // Map new questions to preserve old IDs and SRS progress
+      const updatedQuestions = (subject.questions || []).map((newQ, idx) => {
+        const qKey = newQ.question ? newQ.question.trim().toLowerCase() : '';
+        const matchedOld = oldByQuestion.get(qKey) || (newQ.id ? oldById.get(newQ.id) : null);
+        
+        if (matchedOld && matchedOld.id) {
+          // Preserve the original ID so existing SRS / Anki repetition records remain active
+          return {
+            ...newQ,
+            id: matchedOld.id
+          };
+        }
+        return {
+          ...newQ,
+          id: newQ.id || `q_${Date.now()}_${idx}`
+        };
+      });
+
+      // Update subject in place preserving custom icon/verified flags/ID
+      subjects[targetSubjectId] = {
+        ...existingSub,
+        ...subject,
+        id: targetSubjectId,
+        questions: updatedQuestions
+      };
+      this.saveSubjects(subjects);
+      return { subject: subjects[targetSubjectId], updated: true };
+    } else {
+      // Create new subject
+      subjects[subject.id] = subject;
+      this.saveSubjects(subjects);
+      return { subject: subjects[subject.id], updated: false };
+    }
+  }
+
   static removeSubject(subjectId) {
     const subjects = this.getSubjects();
     if (subjects[subjectId]) { 

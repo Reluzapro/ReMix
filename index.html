@@ -610,7 +610,18 @@
       <div style="background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 2.5rem 1.5rem; text-align: center;" id="drop-zone-csv">
         <span style="font-size: 3.5rem;">📄</span>
         <h3 style="margin: 1rem 0 0.5rem 0; font-family: var(--font-title);">Glissez-déposez votre fichier de cours (.csv / .txt) ici</h3>
-        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Format : Question; Bonne Réponse; Mauvaise 1; Mauvaise 2; Mauvaise 3 (ou Question; Bonne Réponse)</p>
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem 1.25rem; margin-bottom: 1.5rem; display: inline-flex; align-items: center; gap: 1.5rem; text-align: left; flex-wrap: wrap; justify-content: center;">
+          <span style="font-weight: 700; font-size: 0.9rem; color: var(--accent-cyan);">Mode d'importation :</span>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.9rem; color: var(--text-primary);">
+            <input type="radio" name="csv-import-mode" value="update" checked style="cursor: pointer;">
+            🔄 <strong>Mettre à jour</strong> (Conserve les progressions & SRS)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.9rem; color: var(--text-secondary);">
+            <input type="radio" name="csv-import-mode" value="create" style="cursor: pointer;">
+            ➕ <strong>Créer un nouveau paquet</strong>
+          </label>
+        </div>
+
         <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
           <label class="btn-primary" style="cursor: pointer;">
             Sélectionner Fichier(s)
