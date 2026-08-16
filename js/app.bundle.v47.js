@@ -840,16 +840,27 @@ class StorageManager {
 
   static upsertSubjectWithProgress(subject) {
     const subjects = this.getSubjects();
-    const allSRS = this.getSRSData();
     let targetSubjectId = null;
 
-    // Find existing subject by ID or by exact name match (case-insensitive)
-    if (subjects[subject.id]) {
+    const norm = (s) => (s || '')
+      .replace(/\[CSV\]/gi, '')
+      .replace(/\.(csv|txt)$/i, '')
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
+      .replace(/[^a-z0-9]/g, '') // keep only alphanumeric
+      .trim();
+
+    const targetNorm = norm(subject.name);
+
+    // Find existing subject by ID or by normalized name match
+    if (subject.id && subjects[subject.id]) {
       targetSubjectId = subject.id;
-    } else {
-      const existingKey = Object.keys(subjects).find(k => 
-        (subjects[k].name && subject.name && subjects[k].name.trim().toLowerCase() === subject.name.trim().toLowerCase())
-      );
+    } else if (targetNorm) {
+      const existingKey = Object.keys(subjects).find(k => {
+        const existingSub = subjects[k];
+        if (!existingSub) return false;
+        return norm(existingSub.name) === targetNorm || norm(k) === targetNorm;
+      });
       if (existingKey) {
         targetSubjectId = existingKey;
       }
