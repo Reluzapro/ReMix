@@ -1598,7 +1598,7 @@ class CSVParser {
     if (!text) return '';
     let cleaned = text.replace(/&nbsp;/g, ' ')
                       .replace(/<br\s*\/?>/gi, '\n')
-                      .replace(/<\/?[^>]+(>|$)/g, '')
+                      .replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, '')
                       .replace(/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g, '$1')
                       .trim();
     return cleaned;
