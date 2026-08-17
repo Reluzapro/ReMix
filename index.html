@@ -10,18 +10,22 @@
   <!-- Favicon (SVG Emoji⚡) to prevent 404 error -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 
-  <!-- Preconnect to CDNs for blazing fast first load -->
+  <!-- Preconnect to CDNs & Fonts for blazing fast first load -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
-
-  <link rel="stylesheet" href="style.css?v=mobile1">
+  
+  <!-- Optimized Font Loading with font-display swap -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="style.css?v=mobile2">
 
   <!-- Supabase Cloud Database -->
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <!-- PeerJS for Real-time Cross-Network WebRTC Duels -->
   <script defer src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
-  <!-- MathJax Config & Library -->
+  <!-- MathJax Config & Lazy Loader -->
   <script>
     window.MathJax = {
       tex: {
@@ -33,12 +37,28 @@
       },
       svg: {
         fontCache: 'global'
+      },
+      startup: {
+        typeset: false
       }
     };
   </script>
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body class="theme-cyberpunk">
+
+  <!-- Instant App Splash Screen & Progress Loader -->
+  <div id="app-splash-screen">
+    <div class="splash-content">
+      <div class="splash-logo-pulse">⚡</div>
+      <div class="splash-title">ReMix</div>
+      <div class="splash-subtitle">Préparation de vos cours & révisions...</div>
+      <div class="splash-progress-track">
+        <div class="splash-progress-bar" id="splash-progress-bar"></div>
+      </div>
+      <div class="splash-status-text" id="splash-status-text">Initialisation du système...</div>
+    </div>
+  </div>
 
   <!-- Header Section -->
   <header class="app-header">

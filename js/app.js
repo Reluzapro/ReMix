@@ -50,7 +50,23 @@ class AppController {
     this.matchmakingPollInterval = null;
   }
 
+  updateSplashProgress(percent, statusText) {
+    const bar = document.getElementById('splash-progress-bar');
+    const text = document.getElementById('splash-status-text');
+    if (bar) bar.style.width = `${percent}%`;
+    if (text && statusText) text.textContent = statusText;
+  }
+
+  hideSplashScreen() {
+    this.updateSplashProgress(100, 'Prêt ! Lancement...');
+    setTimeout(() => {
+      const splash = document.getElementById('app-splash-screen');
+      if (splash) splash.classList.add('loaded');
+    }, 250);
+  }
+
   init() {
+    this.updateSplashProgress(25, 'Chargement de votre profil...');
     const profile = StorageManager.getProfile();
     
     // Unlock everything for admin
@@ -67,6 +83,7 @@ class AppController {
       });
     }
 
+    this.updateSplashProgress(50, 'Vérification des missions et récompenses...');
     GamificationEngine.checkDailyLogin(profile).then((loginReward) => {
       this.updateHeaderStats();
       if (loginReward) {
@@ -77,6 +94,8 @@ class AppController {
     this.resolveAbandonedBattles();
     this.applyUserTheme();
     this.setupNavigation();
+    
+    this.updateSplashProgress(75, 'Organisation de vos cours & paquets...');
     this.renderCategoryFilters();
     this.renderSubjects();
     this.updatePausedBanner();
@@ -87,6 +106,9 @@ class AppController {
 
     this.setupFriendSystem();
     this.checkAndVerifyLocalDecks();
+
+    // Finish loading and dismiss splash smoothly
+    this.hideSplashScreen();
 
     // Periodic 5-minute silent background cloud sync heartbeat (heavy profile sync)
     setInterval(async () => {
