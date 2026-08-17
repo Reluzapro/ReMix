@@ -242,7 +242,7 @@ export async function pushProfileToCloud(username, hashedKey, profile, srsData, 
 
     try {
       const subjectsStr = JSON.stringify(subjectsData || {});
-      if (subjectsStr.length < 1024 * 1024 * 2) { 
+      if (subjectsStr.length < 1024 * 1024 * 10) { 
         payload.subjects_data = subjectsData;
       }
     } catch (e) {}

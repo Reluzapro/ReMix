@@ -110,7 +110,33 @@ class AppController {
     // Finish loading and dismiss splash smoothly
     this.hideSplashScreen();
 
-    // Periodic 5-minute silent background cloud sync heartbeat (heavy profile sync)
+    // 1. Immediate Cloud Sync on launch (Lightweight timestamp check: ~0.1 KB)
+    setTimeout(async () => {
+      const updated = await StorageManager.syncFromCloudSilent();
+      if (updated) {
+        this.updateHeaderStats();
+        this.updatePausedBanner();
+        if (document.getElementById('subjects-view')?.classList.contains('active')) {
+          this.renderSubjects();
+        }
+      }
+    }, 800);
+
+    // 2. Instant Sync whenever user switches back to the tab/app on phone or computer
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        const updated = await StorageManager.syncFromCloudSilent();
+        if (updated) {
+          this.updateHeaderStats();
+          this.updatePausedBanner();
+          if (document.getElementById('subjects-view')?.classList.contains('active')) {
+            this.renderSubjects();
+          }
+        }
+      }
+    });
+
+    // 3. Periodic silent background cloud sync heartbeat (2 minutes, zero egress if no changes)
     setInterval(async () => {
       const updated = await StorageManager.syncFromCloudSilent();
       if (updated) {
@@ -120,7 +146,7 @@ class AppController {
           this.renderSubjects();
         }
       }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 2 * 60 * 1000); // 2 minutes
 
     // Poll friend notifications every 30 seconds (very light query, doesn't consume much egress)
     setInterval(async () => {
@@ -3023,9 +3049,13 @@ class AppController {
     this.renderCategoryFilters();
     this.renderSubjects();
 
+    // Trigger instant cloud push so imported decks are immediately available on mobile
+    StorageManager.autoSyncCloud();
+
     resultBox.innerHTML = `
       <h4 style="color: var(--accent-green); margin-bottom: 0.5rem;">✅ Importation terminée</h4>
       <p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${successCount}</strong> fichier(s) traité(s) avec succès ${updatedCount > 0 ? `(dont <strong>${updatedCount}</strong> paquet(s) mis à jour avec conservation des scores)` : ''}.</p>
+      <p style="color: var(--accent-cyan); font-size: 0.85rem; margin-bottom: 0.5rem;">☁️ Synchronisation Cloud effectuée instantanément.</p>
       ${errorCount > 0 ? `<p style="color: var(--accent-red);">❌ <strong>${errorCount}</strong> fichier(s) ont échoué.</p>` : ''}
     `;
   }
