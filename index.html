@@ -97,31 +97,7 @@
   <!-- Non-blocking Async Google Fonts -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"></noscript>
-  <link rel="stylesheet" href="style.css?v=mobile4">
-
-  <!-- Background Deferred CDN Libraries -->
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script defer src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-
-  <!-- MathJax Config & Lazy Loader -->
-  <script>
-    window.MathJax = {
-      tex: {
-        inlineMath: [['$', '$'], ['\\(', '\\)']],
-        displayMath: [['$$', '$$'], ['\\[', '\\]']]
-      },
-      options: {
-        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-      },
-      svg: {
-        fontCache: 'global'
-      },
-      startup: {
-        typeset: false
-      }
-    };
-  </script>
-  <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="style.css?v=mobile6">
 </head>
 <body class="theme-cyberpunk">
 
@@ -134,9 +110,23 @@
       <div class="splash-progress-track">
         <div class="splash-progress-bar" id="splash-progress-bar"></div>
       </div>
-      <div class="splash-status-text" id="splash-status-text">Initialisation du système...</div>
+      <div class="splash-status-text" id="splash-status-text">Initialisation instantanée...</div>
     </div>
   </div>
+
+  <script>
+    // 0ms Immediate Progress Kickstart
+    (function() {
+      var bar = document.getElementById('splash-progress-bar');
+      var txt = document.getElementById('splash-status-text');
+      if (bar) bar.style.width = '35%';
+      if (txt) txt.textContent = 'Chargement de vos révisions...';
+      setTimeout(function() {
+        if (bar && !bar.classList.contains('done')) bar.style.width = '70%';
+        if (txt && !bar.classList.contains('done')) txt.textContent = 'Préparation des cartes...';
+      }, 150);
+    })();
+  </script>
 
   <!-- Header Section -->
   <header class="app-header">
@@ -1160,5 +1150,34 @@ je veux des questions sur ..................</pre>
 
   <!-- Single Bundled Script for Instant Execution without Module Network Roundtrips -->
   <script defer src="js/app.bundle.v47.js"></script>
+
+  <!-- Non-Blocking Lazy Load of CDN Support Libraries -->
+  <script>
+    window.addEventListener('load', function() {
+      // Lazy load Supabase and PeerJS after initial render
+      function loadScript(src) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        document.body.appendChild(s);
+      }
+      loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js");
+      loadScript("https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js");
+      
+      // Setup MathJax config and lazy load
+      window.MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']]
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+        },
+        svg: { fontCache: 'global' },
+        startup: { typeset: false }
+      };
+      loadScript("https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js");
+    });
+  </script>
 </body>
 </html>
