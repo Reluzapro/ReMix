@@ -206,7 +206,13 @@ export class GamificationEngine {
     let srsMasteredCount = 0;
     try {
       const srsData = StorageManager.getSRSData();
-      srsMasteredCount = Object.values(srsData).filter(card => (card.interval || 0) >= 3 || (card.repetitions || 0) >= 3).length;
+      srsMasteredCount = Object.values(srsData).filter(card => 
+        (card.reps || 0) >= 3 || 
+        (card.intervalDays || 0) >= 3 || 
+        (card.interval || 0) >= 3 || 
+        (card.repetitions || 0) >= 3 ||
+        (card.baseMastery || 0) >= 0.7
+      ).length;
     } catch (e) {}
 
     ACHIEVEMENTS.forEach(ach => {
