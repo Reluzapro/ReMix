@@ -87,18 +87,6 @@
       font-weight: 500;
     }
   </style>
-
-  <!-- Preconnect to CDNs & Fonts for background caching -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="preconnect" href="https://unpkg.com" crossorigin>
-  
-  <!-- Non-blocking Async Stylesheets & Fonts for True 0ms First Paint -->
-  <link rel="stylesheet" href="style.css?v=mobile7" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="style.css?v=mobile7"></noscript>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"></noscript>
 </head>
 <body class="theme-cyberpunk">
 
@@ -111,17 +99,30 @@
       <div class="splash-progress-track">
         <div class="splash-progress-bar" id="splash-progress-bar"></div>
       </div>
-      <div class="splash-status-text" id="splash-status-text">Initialisation instantanée...</div>
+      <div class="splash-status-text" id="splash-status-text">Chargement...</div>
     </div>
   </div>
 
   <script>
-    // 0ms Immediate Progress Kickstart
+    // 0ms Splash Kickstart — runs IMMEDIATELY, loads style.css in background
     (function() {
       var bar = document.getElementById('splash-progress-bar');
       var txt = document.getElementById('splash-status-text');
       if (bar) bar.style.width = '35%';
       if (txt) txt.textContent = 'Chargement de vos révisions...';
+
+      // Load style.css in background AFTER splash is painted
+      var css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = 'style.css?v=mobile8';
+      document.head.appendChild(css);
+
+      // Load Google Fonts in background
+      var fonts = document.createElement('link');
+      fonts.rel = 'stylesheet';
+      fonts.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap';
+      document.head.appendChild(fonts);
+
       setTimeout(function() {
         if (bar && !bar.classList.contains('done')) bar.style.width = '70%';
         if (txt && !bar.classList.contains('done')) txt.textContent = 'Préparation des cartes...';
