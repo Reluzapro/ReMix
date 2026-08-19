@@ -71,16 +71,14 @@ class AppController {
     
     // Unlock everything for admin
     if (profile.name && profile.name.toLowerCase() === 'admin') {
-      import('./gamification.js').then(({ SHOP_ITEMS }) => {
-        let dirty = false;
-        SHOP_ITEMS.forEach(item => {
-          if (!profile.purchasedItems.includes(item.id)) {
-            profile.purchasedItems.push(item.id);
-            dirty = true;
-          }
-        });
-        if (dirty) StorageManager.saveProfile(profile);
+      let dirty = false;
+      SHOP_ITEMS.forEach(item => {
+        if (!profile.purchasedItems.includes(item.id)) {
+          profile.purchasedItems.push(item.id);
+          dirty = true;
+        }
       });
+      if (dirty) StorageManager.saveProfile(profile);
     }
 
     this.updateSplashProgress(50, 'Vérification des missions et récompenses...');

@@ -1,6 +1,7 @@
 // Gamification module: XP, Levels, Coins, Shop, Achievements, and Power-ups
 import { StorageManager } from './storage.js';
 import { SoundFX } from './audio.js';
+import { fetchServerDate } from './cloudDB.js';
 
 export const ACHIEVEMENTS = [
   // Progression de Base
@@ -340,17 +341,13 @@ export class GamificationEngine {
     // Attempt to get server date
     if (window.supabase) {
       try {
-        const { fetchServerDate } = await import('./cloudDB.js');
         today = await fetchServerDate();
       } catch (e) {
-        console.warn("Could not import fetchServerDate", e);
+        console.warn("Could not fetch server date", e);
       }
     }
 
     if (!today) {
-      // If we strictly want to block time-travel, we abort if offline.
-      // However, to avoid completely breaking the offline game experience, 
-      // we only abort if they are already on a streak.
       console.warn("Using offline date fallback.");
       today = new Date().toISOString().split('T')[0];
     }

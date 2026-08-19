@@ -1,4 +1,4 @@
-// Bundled standalone script for Safari file:// compatibility
+// Bundled standalone script for Instant Web Execution
 (function() {
 'use strict';
 
@@ -1877,6 +1877,7 @@ class CSVParser {
 
 
 
+
 const ACHIEVEMENTS = [
   // Progression de Base
   { id: 'ach_first', title: '🎓 Premiers Pas', desc: 'Compléter votre première session de révision.', icon: '🎯' },
@@ -2215,17 +2216,13 @@ class GamificationEngine {
     // Attempt to get server date
     if (window.supabase) {
       try {
-        const { fetchServerDate } = await import('./cloudDB.js');
         today = await fetchServerDate();
       } catch (e) {
-        console.warn("Could not 
+        console.warn("Could not fetch server date", e);
       }
     }
 
     if (!today) {
-      // If we strictly want to block time-travel, we abort if offline.
-      // However, to avoid completely breaking the offline game experience, 
-      // we only abort if they are already on a streak.
       console.warn("Using offline date fallback.");
       today = new Date().toISOString().split('T')[0];
     }
@@ -2994,9 +2991,7 @@ class MultiplayerEngine {
     }
 
     StorageManager.saveProfile(profile);
-    import('./gamification.js').then(({ GamificationEngine }) => {
-      GamificationEngine.checkAchievements(StorageManager.getProfile());
-    });
+    GamificationEngine.checkAchievements(StorageManager.getProfile());
     return { result, coinsEarned, wager, myScore, oppScore };
   }
 
@@ -3141,16 +3136,14 @@ class AppController {
     
     // Unlock everything for admin
     if (profile.name && profile.name.toLowerCase() === 'admin') {
-      import('./gamification.js').then(({ SHOP_ITEMS }) => {
-        let dirty = false;
-        SHOP_ITEMS.forEach(item => {
-          if (!profile.purchasedItems.includes(item.id)) {
-            profile.purchasedItems.push(item.id);
-            dirty = true;
-          }
-        });
-        if (dirty) StorageManager.saveProfile(profile);
+      let dirty = false;
+      SHOP_ITEMS.forEach(item => {
+        if (!profile.purchasedItems.includes(item.id)) {
+          profile.purchasedItems.push(item.id);
+          dirty = true;
+        }
       });
+      if (dirty) StorageManager.saveProfile(profile);
     }
 
     this.updateSplashProgress(50, 'Vérification des missions et récompenses...');

@@ -1,7 +1,7 @@
 // Real-time Multiplayer Engine using Supabase Realtime for 1v1 Duels — with Global Leaderboard
 import { StorageManager } from './storage.js';
 import { fetchCloudLeaderboard } from './cloudDB.js';
-
+import { GamificationEngine } from './gamification.js';
 
 export class MultiplayerEngine {
   constructor() {
@@ -340,9 +340,7 @@ export class MultiplayerEngine {
     }
 
     StorageManager.saveProfile(profile);
-    import('./gamification.js').then(({ GamificationEngine }) => {
-      GamificationEngine.checkAchievements(StorageManager.getProfile());
-    });
+    GamificationEngine.checkAchievements(StorageManager.getProfile());
     return { result, coinsEarned, wager, myScore, oppScore };
   }
 
