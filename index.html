@@ -92,12 +92,6 @@
       display: none !important;
     }
   </style>
-
-  <!-- Non-blocking Preload for True 0ms First Paint -->
-  <link rel="preload" href="style.css?v=mobile11" as="style" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="style.css?v=mobile11"></noscript>
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"></noscript>
 </head>
 <body class="theme-cyberpunk">
 
@@ -1149,13 +1143,26 @@ je veux des questions sur ..................</pre>
     </div>
   </div>
 
-  <!-- Single Bundled Script loaded dynamically AFTER first paint to completely eliminate preload scanner blocking -->
+  <!-- Single Bundled Script and CSS loaded dynamically AFTER first paint to completely eliminate preload scanner blocking -->
   <script>
     setTimeout(function() {
+      // 1. Load Main App Script
       var s = document.createElement('script');
       s.src = "js/app.bundle.v48.js";
       s.async = true;
       document.body.appendChild(s);
+
+      // 2. Load Main CSS
+      var css = document.createElement('link');
+      css.rel = "stylesheet";
+      css.href = "style.css?v=mobile12";
+      document.body.appendChild(css);
+
+      // 3. Load Fonts
+      var fonts = document.createElement('link');
+      fonts.rel = "stylesheet";
+      fonts.href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap";
+      document.body.appendChild(fonts);
     }, 50); // Small delay guarantees the browser paints the splash screen FIRST
   </script>
 
