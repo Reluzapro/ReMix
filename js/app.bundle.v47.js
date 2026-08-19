@@ -3127,6 +3127,7 @@ class AppController {
     setTimeout(() => {
       const splash = document.getElementById('app-splash-screen');
       if (splash) splash.classList.add('loaded');
+      document.body.classList.add('app-ready');
     }, 250);
   }
 

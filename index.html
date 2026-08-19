@@ -86,7 +86,18 @@
       color: #6b7280;
       font-weight: 500;
     }
+    
+    /* PREVENT FOUC: Hide everything except the splash screen until app is ready */
+    body:not(.app-ready) > *:not(#app-splash-screen):not(script):not(style) {
+      display: none !important;
+    }
   </style>
+
+  <!-- Non-blocking Preload for True 0ms First Paint -->
+  <link rel="preload" href="style.css?v=mobile11" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="style.css?v=mobile11"></noscript>
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"></noscript>
 </head>
 <body class="theme-cyberpunk">
 
@@ -1141,10 +1152,7 @@ je veux des questions sur ..................</pre>
   <!-- Single Bundled Script for Instant Execution without Module Network Roundtrips -->
   <script async src="js/app.bundle.v47.js"></script>
 
-  <!-- Non-Blocking Lazy Load of CDN Support Libraries & Main CSS -->
-  <link rel="stylesheet" href="style.css?v=mobile10">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap">
-
+  <!-- Non-Blocking Lazy Load of CDN Support Libraries -->
   <script>
     window.addEventListener('load', function() {
       // Lazy load Supabase and PeerJS after initial render
