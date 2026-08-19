@@ -10,7 +10,85 @@
   <!-- Favicon (SVG Emoji⚡) to prevent 404 error -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 
-  <!-- Preconnect to CDNs & Fonts for blazing fast first load -->
+  <style>
+    /* Critical Inline Zero-Delay Splash Screen CSS (Rendered in 0ms) */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0b0f19;
+      color: #f9fafb;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    #app-splash-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      background: radial-gradient(circle at center, #111827 0%, #0b0f19 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    #app-splash-screen.loaded {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .splash-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 320px;
+      width: 90%;
+      text-align: center;
+    }
+    .splash-logo-pulse {
+      font-size: 3.5rem;
+      margin-bottom: 0.75rem;
+      animation: splashPulse 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes splashPulse {
+      0% { transform: scale(0.92); filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.5)); }
+      100% { transform: scale(1.08); filter: drop-shadow(0 0 25px rgba(236, 72, 153, 0.8)); }
+    }
+    .splash-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.25rem;
+    }
+    .splash-subtitle {
+      color: #9ca3af;
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+    .splash-progress-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .splash-progress-bar {
+      height: 100%;
+      width: 20%;
+      background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+      border-radius: 999px;
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.8);
+    }
+    .splash-status-text {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+      font-weight: 500;
+    }
+  </style>
+
+  <!-- Preconnect to CDNs & Fonts for background caching -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -18,11 +96,10 @@
   
   <!-- Optimized Font Loading with font-display swap -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap">
-  <link rel="stylesheet" href="style.css?v=mobile2">
+  <link rel="stylesheet" href="style.css?v=mobile3">
 
-  <!-- Supabase Cloud Database -->
+  <!-- Background Deferred CDN Libraries -->
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <!-- PeerJS for Real-time Cross-Network WebRTC Duels -->
   <script defer src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
   <!-- MathJax Config & Lazy Loader -->
@@ -47,7 +124,7 @@
 </head>
 <body class="theme-cyberpunk">
 
-  <!-- Instant App Splash Screen & Progress Loader -->
+  <!-- Instant App Splash Screen & Progress Loader (Renders in 0ms) -->
   <div id="app-splash-screen">
     <div class="splash-content">
       <div class="splash-logo-pulse">⚡</div>
@@ -1080,6 +1157,7 @@ je veux des questions sur ..................</pre>
     </div>
   </div>
 
-  <script type="module" src="js/app.js"></script>
+  <!-- Single Bundled Script for Instant Execution without Module Network Roundtrips -->
+  <script defer src="js/app.bundle.v47.js"></script>
 </body>
 </html>
