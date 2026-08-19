@@ -2429,7 +2429,7 @@ class AppController {
       unverifiedBanner.style.border = '1px solid #ffcc00';
       unverifiedBanner.style.color = '#ffcc00';
       unverifiedBanner.style.textAlign = 'center';
-      unverifiedBanner.innerHTML = '⚠️ <b>Mode Entraînement :</b> Ce paquet n\'est pas vérifié par la communauté. Vous ne gagnez ni pièces ni XP.';
+      unverifiedBanner.innerHTML = '⏳ <b>Paquet en attente de vérification :</b> Vos pièces et XP sont enregistrés en réserve. Dès que ce cours sera validé par la communauté, vous recevrez automatiquement toutes vos récompenses rétroactivement !';
       levelupEl.parentNode.insertBefore(unverifiedBanner, levelupEl.nextSibling);
     }
     unverifiedBanner.style.display = summary.isUnverified ? 'block' : 'none';
@@ -3799,8 +3799,15 @@ class AppController {
 
       const subjects = StorageManager.getSubjects();
       let modified = false;
+      let totalClaimedXP = 0;
+      let totalClaimedCoins = 0;
+      let verifiedCount = 0;
 
-      Object.values(subjects).forEach(sub => {
+      const profile = StorageManager.getProfile();
+      profile.stats = profile.stats || {};
+      const pendingRewards = profile.stats.pendingRewards || {};
+
+      Object.entries(subjects).forEach(([subId, sub]) => {
         if (sub.verified === false) {
           const cleanName = (sub.pathParts ? sub.pathParts[sub.pathParts.length - 1] : sub.name).replace(/\[CSV\]/g, '').trim().toLowerCase();
           
@@ -3808,6 +3815,15 @@ class AppController {
           if (match) {
             sub.verified = true;
             modified = true;
+            verifiedCount++;
+
+            // Retroactively claim pending XP and Coins earned while unverified
+            if (pendingRewards[subId]) {
+              totalClaimedXP += (pendingRewards[subId].xp || 0);
+              totalClaimedCoins += (pendingRewards[subId].coins || 0);
+              delete pendingRewards[subId];
+            }
+
             console.log(`Local deck "${sub.name}" has been recognized a posteriori by the community and is now verified!`);
           }
         }
@@ -3815,6 +3831,17 @@ class AppController {
 
       if (modified) {
         StorageManager.saveSubjects(subjects);
+        profile.stats.pendingRewards = pendingRewards;
+
+        if (totalClaimedXP > 0 || totalClaimedCoins > 0) {
+          const { profile: updatedProf, leveledUp } = GamificationEngine.addReward(profile, 0, totalClaimedXP, totalClaimedCoins);
+          GamificationEngine.checkAchievements(updatedProf);
+          this.updateHeaderStats();
+          alert(`🎉 Félicitations !\n${verifiedCount} de vos paquets de révision ont été vérifiés par la communauté !\n\nVous recevez rétroactivement vos récompenses réservées :\n+${totalClaimedXP} XP ⚡\n+${totalClaimedCoins} Pièces 🪙`);
+        } else {
+          StorageManager.saveProfile(profile);
+        }
+
         this.renderSubjects();
       }
     } catch (e) {

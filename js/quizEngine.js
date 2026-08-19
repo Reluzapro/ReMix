@@ -248,14 +248,8 @@ export class QuizEngine {
     const subject = StorageManager.getSubjects()[this.currentSession.subjectId];
     const isUnverified = subject && subject.verified === false;
 
-    if (this.currentSession.mode === 'revision' || isUnverified) {
-      this.currentSession.score = 0;
-      xpEarned = 0;
-      coinsEarned = 0;
-    }
-
     const profile = StorageManager.getProfile();
-
+    profile.stats = profile.stats || {};
     profile.stats.gamesPlayed += 1;
     profile.stats.correctAnswers += correct;
     profile.stats.wrongAnswers += this.currentSession.wrongCount;
@@ -263,6 +257,27 @@ export class QuizEngine {
 
     if (accuracy === 100 && totalAnswered >= 5) {
       profile.stats.perfectGames += 1;
+    }
+
+    let pendingAwarded = false;
+    if (this.currentSession.mode === 'revision') {
+      this.currentSession.score = 0;
+      xpEarned = 0;
+      coinsEarned = 0;
+    } else if (isUnverified) {
+      // Accumulate pending XP and Coins so the player gets retroactively rewarded once verified!
+      profile.stats.pendingRewards = profile.stats.pendingRewards || {};
+      const subId = this.currentSession.subjectId;
+      profile.stats.pendingRewards[subId] = profile.stats.pendingRewards[subId] || { xp: 0, coins: 0, games: 0, correct: 0 };
+      profile.stats.pendingRewards[subId].xp += xpEarned;
+      profile.stats.pendingRewards[subId].coins += coinsEarned;
+      profile.stats.pendingRewards[subId].games += 1;
+      profile.stats.pendingRewards[subId].correct += correct;
+
+      this.currentSession.score = 0;
+      xpEarned = 0;
+      coinsEarned = 0;
+      pendingAwarded = true;
     }
 
     const { profile: updatedProfile, leveledUp } = GamificationEngine.addReward(profile, this.currentSession.score, xpEarned, coinsEarned);
@@ -279,7 +294,8 @@ export class QuizEngine {
       leveledUp: leveledUp,
       newAchievements: newAchievements,
       history: this.currentSession.history,
-      isUnverified: isUnverified
+      isUnverified: isUnverified,
+      pendingAwarded: pendingAwarded
     };
 
     this.currentSession = null;
