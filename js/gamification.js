@@ -3,14 +3,42 @@ import { StorageManager } from './storage.js';
 import { SoundFX } from './audio.js';
 
 export const ACHIEVEMENTS = [
+  // Progression de Base
   { id: 'ach_first', title: '🎓 Premiers Pas', desc: 'Compléter votre première session de révision.', icon: '🎯' },
   { id: 'ach_perfect', title: '🌟 Sans Faute', desc: 'Obtenir 100% de réponses correctes sur une session.', icon: '🏆' },
+  { id: 'ach_perfect_5', title: '💫 Perfectionniste', desc: 'Réaliser 5 sessions parfaites à 100%.', icon: '✨' },
+  
+  // Combos & Streaks
   { id: 'ach_streak_5', title: '🔥 Sur une Lance', desc: 'Atteindre un combo de 5 bonnes réponses d\'affilée.', icon: '⚡' },
   { id: 'ach_streak_10', title: '⚡ Inarrêtable', desc: 'Atteindre un combo de 10 bonnes réponses d\'affilée.', icon: '🚀' },
+  { id: 'ach_streak_20', title: '☄️ Météore', desc: 'Atteindre un combo de 20 bonnes réponses d\'affilée.', icon: '💥' },
+
+  // Niveaux & XP
   { id: 'ach_level_5', title: '🧠 Savant Fou', desc: 'Atteindre le niveau 5.', icon: '👑' },
+  { id: 'ach_level_10', title: '🏛️ Grand Maître', desc: 'Atteindre le niveau 10.', icon: '⚜️' },
+  { id: 'ach_level_20', title: '🌌 Omniscient', desc: 'Atteindre le niveau 20.', icon: '👁️' },
+
+  // Économie & Boutique
   { id: 'ach_coins_500', title: '💰 Chasseur de Pièces', desc: 'Accumuler un total de 500 pièces.', icon: '🪙' },
+  { id: 'ach_coins_2000', title: '🏦 Banquier', desc: 'Accumuler un total de 2000 pièces.', icon: '💵' },
+  { id: 'ach_coins_5000', title: '💎 Millionnaire', desc: 'Accumuler un total de 5000 pièces.', icon: '👑' },
   { id: 'ach_shop_buy', title: '🛍️ Client VIP', desc: 'Acheter un élément dans la boutique.', icon: '💎' },
-  { id: 'ach_custom_subject', title: '📝 Professeur', desc: 'Importer votre propre cours via CSV.', icon: '📚' }
+  { id: 'ach_custom_reward', title: '🎁 Auto-Récompense', desc: 'Créer une récompense personnalisée dans la boutique.', icon: '🎉' },
+
+  // Cartes & Exercices
+  { id: 'ach_correct_50', title: '📖 Studieux', desc: 'Répondre correctement à 50 questions.', icon: '✏️' },
+  { id: 'ach_correct_200', title: '📚 Encyclopédie', desc: 'Répondre correctement à 200 questions.', icon: '📖' },
+  { id: 'ach_correct_500', title: '🎓 Sommité du Savoir', desc: 'Répondre correctement à 500 questions.', icon: '🧠' },
+  { id: 'ach_custom_subject', title: '📝 Professeur', desc: 'Importer ou posséder un cours personnalisé via CSV.', icon: '📚' },
+  { id: 'ach_srs_master', title: '🔁 Maître de la Répétition', desc: 'Maîtriser au moins 20 cartes en répétition espacée (SRS).', icon: '🔄' },
+
+  // Duels Multijoueur
+  { id: 'ach_duel_first', title: '⚔️ Gladiateur', desc: 'Participer à votre premier duel 1v1.', icon: '🛡️' },
+  { id: 'ach_duel_win', title: '🥇 Champion d\'Arène', desc: 'Remporter votre premier duel multijoueur.', icon: '🏆' },
+  { id: 'ach_duel_wins_5', title: '👑 Invaincu', desc: 'Remporter 5 duels multijoueur.', icon: '🎖️' },
+
+  // Compte & Social
+  { id: 'ach_cloud_connected', title: '☁️ Synchronisé', desc: 'Associer un compte Cloud à votre profil.', icon: '🌐' }
 ];
 export const EXCLUSIVE_EMOJIS = [
   { id: 'emoji_time_1', emoji: '📅', label: 'Calendrier' },
@@ -158,17 +186,69 @@ export class GamificationEngine {
 
   static checkAchievements(profile) {
     const newlyUnlocked = [];
+    const stats = profile.stats || {};
+    
+    // Check custom subject condition (Professeur)
+    let hasCustomSubject = false;
+    try {
+      const subjects = StorageManager.getSubjects();
+      hasCustomSubject = Object.values(subjects).some(s => 
+        !s.deleted && (
+          s.originalFileName || 
+          s.id.startsWith('sub_') || 
+          s.id.startsWith('custom_') || 
+          (s.description && s.description.toLowerCase().includes('importé'))
+        )
+      );
+    } catch (e) {}
+
+    // Check SRS mastered cards count
+    let srsMasteredCount = 0;
+    try {
+      const srsData = StorageManager.getSRSData();
+      srsMasteredCount = Object.values(srsData).filter(card => (card.interval || 0) >= 3 || (card.repetitions || 0) >= 3).length;
+    } catch (e) {}
+
     ACHIEVEMENTS.forEach(ach => {
       if (profile.unlockedAchievements.includes(ach.id)) return;
 
       let conditionMet = false;
-      if (ach.id === 'ach_first' && profile.stats.gamesPlayed >= 1) conditionMet = true;
-      if (ach.id === 'ach_perfect' && profile.stats.perfectGames >= 1) conditionMet = true;
-      if (ach.id === 'ach_streak_5' && profile.maxStreak >= 5) conditionMet = true;
-      if (ach.id === 'ach_streak_10' && profile.maxStreak >= 10) conditionMet = true;
-      if (ach.id === 'ach_level_5' && profile.level >= 5) conditionMet = true;
-      if (ach.id === 'ach_coins_500' && (profile.totalCoinsEarned || profile.coins) >= 500) conditionMet = true;
-      if (ach.id === 'ach_shop_buy' && profile.purchasedItems.length > 2) conditionMet = true;
+      // Progression & Perfection
+      if (ach.id === 'ach_first' && (stats.gamesPlayed || 0) >= 1) conditionMet = true;
+      if (ach.id === 'ach_perfect' && (stats.perfectGames || 0) >= 1) conditionMet = true;
+      if (ach.id === 'ach_perfect_5' && (stats.perfectGames || 0) >= 5) conditionMet = true;
+
+      // Streaks
+      if (ach.id === 'ach_streak_5' && (profile.maxStreak || 0) >= 5) conditionMet = true;
+      if (ach.id === 'ach_streak_10' && (profile.maxStreak || 0) >= 10) conditionMet = true;
+      if (ach.id === 'ach_streak_20' && (profile.maxStreak || 0) >= 20) conditionMet = true;
+
+      // Levels
+      if (ach.id === 'ach_level_5' && (profile.level || 1) >= 5) conditionMet = true;
+      if (ach.id === 'ach_level_10' && (profile.level || 1) >= 10) conditionMet = true;
+      if (ach.id === 'ach_level_20' && (profile.level || 1) >= 20) conditionMet = true;
+
+      // Coins & Shop
+      if (ach.id === 'ach_coins_500' && (profile.totalCoinsEarned || profile.coins || 0) >= 500) conditionMet = true;
+      if (ach.id === 'ach_coins_2000' && (profile.totalCoinsEarned || profile.coins || 0) >= 2000) conditionMet = true;
+      if (ach.id === 'ach_coins_5000' && (profile.totalCoinsEarned || profile.coins || 0) >= 5000) conditionMet = true;
+      if (ach.id === 'ach_shop_buy' && (profile.purchasedItems || []).length > 2) conditionMet = true;
+      if (ach.id === 'ach_custom_reward' && (profile.customRewards || []).length >= 1) conditionMet = true;
+
+      // Questions & Learning
+      if (ach.id === 'ach_correct_50' && (stats.correctAnswers || 0) >= 50) conditionMet = true;
+      if (ach.id === 'ach_correct_200' && (stats.correctAnswers || 0) >= 200) conditionMet = true;
+      if (ach.id === 'ach_correct_500' && (stats.correctAnswers || 0) >= 500) conditionMet = true;
+      if (ach.id === 'ach_custom_subject' && hasCustomSubject) conditionMet = true;
+      if (ach.id === 'ach_srs_master' && srsMasteredCount >= 20) conditionMet = true;
+
+      // Duels
+      if (ach.id === 'ach_duel_first' && ((stats.duelPlayed || 0) >= 1 || (stats.duelsPlayed || 0) >= 1)) conditionMet = true;
+      if (ach.id === 'ach_duel_win' && (stats.duelWins || 0) >= 1) conditionMet = true;
+      if (ach.id === 'ach_duel_wins_5' && (stats.duelWins || 0) >= 5) conditionMet = true;
+
+      // Cloud
+      if (ach.id === 'ach_cloud_connected' && !!(profile.cloudAccount && profile.cloudAccount.username)) conditionMet = true;
 
       if (conditionMet) {
         profile.unlockedAchievements.push(ach.id);

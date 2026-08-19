@@ -311,6 +311,7 @@ export class MultiplayerEngine {
     const profile = StorageManager.getProfile();
     profile.stats = profile.stats || {};
     profile.stats.duelPlayed = (profile.stats.duelPlayed || 0) + 1;
+    profile.stats.duelsPlayed = (profile.stats.duelsPlayed || 0) + 1;
 
     let result, coinsEarned = 0;
 
@@ -339,6 +340,9 @@ export class MultiplayerEngine {
     }
 
     StorageManager.saveProfile(profile);
+    import('./gamification.js').then(({ GamificationEngine }) => {
+      GamificationEngine.checkAchievements(StorageManager.getProfile());
+    });
     return { result, coinsEarned, wager, myScore, oppScore };
   }
 
