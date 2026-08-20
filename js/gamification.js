@@ -293,8 +293,12 @@ export class GamificationEngine {
       return { success: false, message: 'Pièces insuffisantes !' };
     }
 
-    profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + item.cost;
-    profile.totalCoinsEarned = profile.totalCoinsEarned ?? (profile.coins + profile.totalCoinsSpent);
+    // Initialize tracking variables if they don't exist
+    profile.totalCoinsEarned = profile.totalCoinsEarned ?? profile.coins ?? 50;
+    profile.totalCoinsSpent = profile.totalCoinsSpent ?? 0;
+    
+    // Process the purchase
+    profile.totalCoinsSpent += item.cost;
     profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     SoundFX.playPurchase();
 
@@ -323,8 +327,8 @@ export class GamificationEngine {
       return { success: false, message: 'Pas assez de pièces pour débloquer cette vraie récompense !' };
     }
 
+    profile.totalCoinsEarned = profile.totalCoinsEarned ?? profile.coins ?? 50;
     profile.totalCoinsSpent = (profile.totalCoinsSpent ?? 0) + reward.cost;
-    profile.totalCoinsEarned = profile.totalCoinsEarned ?? (profile.coins + profile.totalCoinsSpent);
     profile.coins = Math.max(0, profile.totalCoinsEarned - profile.totalCoinsSpent);
     reward.redeemedCount = (reward.redeemedCount || 0) + 1;
     SoundFX.playPurchase();
