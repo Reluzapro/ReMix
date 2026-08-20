@@ -909,6 +909,7 @@ class AppController {
           folder.decks.forEach(sub => {
             if (subjects[sub.id]) {
               delete subjects[sub.id];
+              StorageManager.markSubjectAsDeleted(sub.id);
               subjectsModified = true;
             }
           });
@@ -1040,6 +1041,7 @@ class AppController {
       if (confirm(`Voulez-vous vraiment supprimer le paquet "${cleanName}" ?`)) {
         const subjects = StorageManager.getSubjects();
         delete subjects[sub.id];
+        StorageManager.markSubjectAsDeleted(sub.id);
         StorageManager.saveSubjects(subjects);
         this.renderSubjects();
       }
@@ -3172,7 +3174,10 @@ class AppController {
       if (this.selectedSubjects.size === 0) return;
       if (confirm(`Voulez-vous vraiment supprimer les ${this.selectedSubjects.size} éléments sélectionnés ?`)) {
         const subjects = StorageManager.getSubjects();
-        this.selectedSubjects.forEach(id => delete subjects[id]);
+        this.selectedSubjects.forEach(id => {
+          delete subjects[id];
+          StorageManager.markSubjectAsDeleted(id);
+        });
         StorageManager.saveSubjects(subjects);
         this.selectedSubjects.clear();
         this.isSelectMode = false;

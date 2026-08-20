@@ -166,6 +166,11 @@ function mergeProfileData(localProfile, cloudProfile) {
   const cPurchased = cloudProfile.purchasedItems || [];
   merged.purchasedItems = Array.from(new Set([...cPurchased, ...lPurchased]));
 
+  // Track deleted custom subjects to prevent zombies
+  const lDeletedSub = localProfile.deletedCustomSubjects || [];
+  const cDeletedSub = cloudProfile.deletedCustomSubjects || [];
+  merged.deletedCustomSubjects = Array.from(new Set([...cDeletedSub, ...lDeletedSub]));
+
   // Merge Inventory (Power-ups: take max of each powerup count)
   const lInv = localProfile.inventory || {};
   const cInv = cloudProfile.inventory || {};
@@ -211,8 +216,12 @@ function mergeProfileData(localProfile, cloudProfile) {
   return merged;
 }
 
-function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}) {
-  return { ...cloudSubjects, ...localSubjects };
+function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}, deletedSubjects = []) {
+  const merged = { ...cloudSubjects, ...localSubjects };
+  deletedSubjects.forEach(id => {
+    delete merged[id];
+  });
+  return merged;
 }
 
 async function checkCloudUpdateTimestamp() {
@@ -765,6 +774,16 @@ function computeAntiCheatToken(profile) {
 let subscribers = [];
 
 class StorageManager {
+  static isInitialSyncComplete = false;
+
+  static markSubjectAsDeleted(id) {
+    const profile = this.getProfile();
+    profile.deletedCustomSubjects = profile.deletedCustomSubjects || [];
+    if (!profile.deletedCustomSubjects.includes(id)) {
+      profile.deletedCustomSubjects.push(id);
+      this.saveProfile(profile);
+    }
+  }
   static subscribe(fn) {
     subscribers.push(fn);
   }
@@ -1124,48 +1143,66 @@ class StorageManager {
     const localTimestamp = localTimestampStr ? Number(localTimestampStr) : 0;
     
     if (cloudTimestamp <= localTimestamp && cloudTimestamp !== 0) {
+      this.isInitialSyncComplete = true; // Mark as complete even if up to date
       return false; // Up to date, no need to download 1.6MB!
     }
 
     // Pass true to include subjects_data
     const cloudData = await fetchProfileFromCloud(username, hashedKey, true);
-    if (!cloudData) return false;
+    if (!cloudData) {
+      this.isInitialSyncComplete = true; // Offline fallback
+      return false;
+    }
 
     // Update local sync timestamp
     if (cloudData.updated_at) {
       localStorage.setItem('remix_last_cloud_sync', cloudData.updated_at.toString());
     }
 
+    let currentProfile = this.getProfile(); // Fetch before merge
     if (cloudData.profile_data) {
-      const currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
+      currentProfile = this.getProfile(); // Re-fetch to avoid race conditions!
       const mergedProf = mergeProfileData(currentProfile, cloudData.profile_data);
       // Ensure we re-compute anti-cheat token so we don't accidentally ban the user
       mergedProf.checksumToken = computeAntiCheatToken(mergedProf);
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(mergedProf));
+      currentProfile = mergedProf; // Update for subjects merge
     }
+    
     if (cloudData.srs_data) {
       if (cloudData.srs_data.srs) localStorage.setItem(STORAGE_KEYS.CARD_SRS, JSON.stringify(cloudData.srs_data.srs));
       if (cloudData.srs_data.revisionItems) localStorage.setItem(STORAGE_KEYS.REVISION_ITEMS, JSON.stringify(cloudData.srs_data.revisionItems));
     }
+    
     if (cloudData.subjects_data) {
       let localOptimized = {};
       try {
         const str = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
         if (str) localOptimized = JSON.parse(str);
       } catch(e) {}
-      const mergedSubs = mergeSubjectsData(localOptimized, cloudData.subjects_data);
+      
+      const deletedCustomSubjects = currentProfile.deletedCustomSubjects || [];
+      const mergedSubs = mergeSubjectsData(localOptimized, cloudData.subjects_data, deletedCustomSubjects);
       localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(mergedSubs));
     }
+    
     if (cloudData.paused_session) {
       localStorage.setItem(STORAGE_KEYS.PAUSED_SESSION, JSON.stringify(cloudData.paused_session));
     } else if (cloudData.paused_session === null || (cloudData.srs_data && cloudData.srs_data.pausedSession === null)) {
       localStorage.removeItem(STORAGE_KEYS.PAUSED_SESSION);
     }
+    
+    this.isInitialSyncComplete = true;
     return true;
   }
 
   /* --- CLOUD ACCOUNT SYNC (Supabase) --- */
   static async autoSyncCloud() {
+    if (!this.isInitialSyncComplete) {
+      console.log('autoSyncCloud: Waiting for initial sync to complete to prevent overwriting cloud data.');
+      return;
+    }
+
     const profile = this.getProfile();
     if (!profile?.cloudAccount?.username || !profile?.cloudAccount?.hashedKey) return;
     const { username, hashedKey } = profile.cloudAccount;
@@ -3974,6 +4011,7 @@ class AppController {
           folder.decks.forEach(sub => {
             if (subjects[sub.id]) {
               delete subjects[sub.id];
+              StorageManager.markSubjectAsDeleted(sub.id);
               subjectsModified = true;
             }
           });
@@ -4105,6 +4143,7 @@ class AppController {
       if (confirm(`Voulez-vous vraiment supprimer le paquet "${cleanName}" ?`)) {
         const subjects = StorageManager.getSubjects();
         delete subjects[sub.id];
+        StorageManager.markSubjectAsDeleted(sub.id);
         StorageManager.saveSubjects(subjects);
         this.renderSubjects();
       }
@@ -6237,7 +6276,10 @@ class AppController {
       if (this.selectedSubjects.size === 0) return;
       if (confirm(`Voulez-vous vraiment supprimer les ${this.selectedSubjects.size} éléments sélectionnés ?`)) {
         const subjects = StorageManager.getSubjects();
-        this.selectedSubjects.forEach(id => delete subjects[id]);
+        this.selectedSubjects.forEach(id => {
+          delete subjects[id];
+          StorageManager.markSubjectAsDeleted(id);
+        });
         StorageManager.saveSubjects(subjects);
         this.selectedSubjects.clear();
         this.isSelectMode = false;

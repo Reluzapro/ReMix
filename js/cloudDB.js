@@ -157,6 +157,11 @@ export function mergeProfileData(localProfile, cloudProfile) {
   const cPurchased = cloudProfile.purchasedItems || [];
   merged.purchasedItems = Array.from(new Set([...cPurchased, ...lPurchased]));
 
+  // Track deleted custom subjects to prevent zombies
+  const lDeletedSub = localProfile.deletedCustomSubjects || [];
+  const cDeletedSub = cloudProfile.deletedCustomSubjects || [];
+  merged.deletedCustomSubjects = Array.from(new Set([...cDeletedSub, ...lDeletedSub]));
+
   // Merge Inventory (Power-ups: take max of each powerup count)
   const lInv = localProfile.inventory || {};
   const cInv = cloudProfile.inventory || {};
@@ -202,8 +207,12 @@ export function mergeProfileData(localProfile, cloudProfile) {
   return merged;
 }
 
-export function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}) {
-  return { ...cloudSubjects, ...localSubjects };
+export function mergeSubjectsData(localSubjects = {}, cloudSubjects = {}, deletedSubjects = []) {
+  const merged = { ...cloudSubjects, ...localSubjects };
+  deletedSubjects.forEach(id => {
+    delete merged[id];
+  });
+  return merged;
 }
 
 export async function checkCloudUpdateTimestamp() {
