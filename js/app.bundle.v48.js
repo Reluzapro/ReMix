@@ -5502,7 +5502,7 @@ class AppController {
     // Update daily quests
     const profile = StorageManager.getProfile();
     GamificationEngine.updateDailyQuests(profile, 'sessions', 1);
-    if (summary.totalQuestions > 0 && summary.correctAnswers === summary.totalQuestions) {
+    if (summary.totalQuestions > 0 && summary.correctCount === summary.totalQuestions) {
       GamificationEngine.updateDailyQuests(profile, 'perfect', 1);
     }
 
