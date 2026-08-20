@@ -3672,7 +3672,16 @@ class AppController {
 
   applyUserTheme() {
     const profile = StorageManager.getProfile();
-    document.body.className = profile.theme || 'theme-cyberpunk';
+    const newTheme = profile.theme || 'theme-cyberpunk';
+    
+    // Remove only theme-* classes
+    document.body.className.split(' ').forEach(cls => {
+      if (cls.startsWith('theme-')) {
+        document.body.classList.remove(cls);
+      }
+    });
+    
+    document.body.classList.add(newTheme);
   }
 
   updateHeaderStats() {
